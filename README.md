@@ -1,53 +1,27 @@
 # PatchHive
 
-PatchHive is a desktop-first multi-agent workspace for open-source contribution work. It gives each agent a clear specialty, keeps evidence attached to every decision, and leaves risky edits or maintainer communication behind explicit human approval gates.
+PatchHive is a browser-only local workbench for open-source maintainers. It turns a GitHub issue or PR, pasted diff, log, or manual brief into a structured mission with specialized agent lanes, evidence, approval gates, and a maintainer handoff draft.
 
-## Why PatchHive
+The v1 product is intentionally local-first:
 
-Most multi-agent demos stop at chat bubbles. PatchHive is aimed at real contribution workflows:
+- no backend
+- no OAuth
+- no model execution
+- no external posting
 
-- issue triage
-- repository understanding
-- review simulation
-- patch planning
-- test generation
-- maintainer handoff
+Instead, PatchHive focuses on the core contribution workflow: capture context, assign structured agent work, keep evidence traceable, require human approval before risky handoff, and export a concise Markdown package.
 
-The product idea is simple: let multiple agents work in parallel, but keep the process structured, inspectable, and human-led.
+## What Works
 
-## Current MVP
-
-This first version is a product prototype built with React, TypeScript, and Vite. It showcases:
-
-- a mission-based workspace with reusable presets
-- parallel agent lanes for planning, repo reading, review, patching, and testing
-- timeline checkpoints and next-action prompts
-- evidence cards tied to files, logs, and decisions
-- human approval gates before risky handoffs
-- a maintainer-facing outputs panel
-
-The interface currently ships with three example missions:
-
-1. `PR Rescue`
-2. `Issue Intake`
-3. `Release Brief`
-
-## Product Direction
-
-PatchHive is designed around five principles:
-
-- specialization over generic agent chatter
-- evidence before action
-- human approval for meaningful risk
-- maintainers need concise handoffs, not noisy transcripts
-- workflows should feel good on desktop and remain usable on mobile
-
-## Stack
-
-- React 19
-- TypeScript
-- Vite
-- hand-authored CSS
+- Create missions from three templates: `PR Rescue`, `Issue Intake`, and `Release Brief`
+- Paste a GitHub issue or PR URL, diff, log, or manual source brief
+- Persist missions, stages, evidence, approvals, and handoff drafts in browser storage
+- Edit structured lanes for Planner, Repo Reader, Review Agent, Patch Agent, and Test Agent
+- Attach evidence as file, log, decision, link, or diff records
+- Approve or withdraw human gates with timestamps
+- Block handoff export until required approvals are complete
+- Copy or download Markdown handoff output
+- Reset to sample data
 
 ## Run Locally
 
@@ -62,15 +36,37 @@ For a production build:
 npm run build
 ```
 
-## Roadmap
+Lint the project:
 
-- add a real mission composer instead of static presets
-- persist mission state locally
-- attach repository files and issue links as live evidence
-- support pluggable model providers
-- add replayable activity logs and exportable handoff summaries
-- explore a Tauri desktop shell
+```bash
+npm run lint
+```
 
-## Repo Status
+## Typical Workflow
 
-This repository used to contain a small lottery page. It has now been reset and rebuilt around a new product direction: a serious multi-agent collaboration tool for software contribution workflows.
+1. Click `New mission`.
+2. Pick a template.
+3. Paste a GitHub URL, diff, log, or manual brief.
+4. Confirm the goal and guardrails.
+5. Add findings to each agent lane.
+6. Attach evidence to the mission.
+7. Approve the required gates.
+8. Copy or download the Markdown handoff.
+
+## V1 Limits
+
+- GitHub URLs are parsed locally; GitHub API import is not implemented.
+- Agent lanes are structured workflow surfaces, not live model agents.
+- Storage is local to the browser.
+- Handoff export is Markdown only.
+- External maintainer communication always remains a manual human action.
+
+## Product Direction
+
+PatchHive is designed around five principles:
+
+- specialization over generic agent chatter
+- evidence before action
+- human approval for meaningful risk
+- maintainers need concise handoffs, not noisy transcripts
+- workflows should feel useful on desktop and remain usable on mobile
