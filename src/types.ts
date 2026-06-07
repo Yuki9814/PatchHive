@@ -39,6 +39,7 @@ export type EvidenceItem = {
   sourceText?: string
   url?: string
   filePath?: string
+  stageId?: string
   agentId?: string
   createdAt: string
 }

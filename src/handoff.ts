@@ -23,7 +23,29 @@ function stageLine(stage: MissionStage) {
 }
 
 export function isHandoffReady(mission: Mission) {
-  return mission.approvals.every((approval) => approval.approved)
+  return getHandoffBlockers(mission).length === 0
+}
+
+export function getHandoffBlockers(mission: Mission) {
+  const blockers = mission.approvals
+    .filter((approval) => !approval.approved)
+    .map((approval) => `${approval.label} before ${approval.requiredBefore}`)
+
+  const requiredDrafts: Array<[label: string, value: string]> = [
+    ['Summary', mission.outputs.summary],
+    ['Patch plan', mission.outputs.patchPlan],
+    ['Test plan', mission.outputs.testPlan],
+    ['Risks', mission.outputs.risks],
+    ['Maintainer comment', mission.outputs.maintainerComment],
+  ]
+
+  requiredDrafts.forEach(([label, value]) => {
+    if (!value.trim()) {
+      blockers.push(`${label} is required`)
+    }
+  })
+
+  return blockers
 }
 
 export function buildHandoffMarkdown(mission: Mission) {
@@ -44,6 +66,10 @@ Status: ${isHandoffReady(mission) ? 'Ready for maintainer handoff' : 'Needs appr
 ## Goal
 
 ${mission.goal}
+
+## Summary
+
+${mission.outputs.summary}
 
 ## Scope Guardrails
 

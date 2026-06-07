@@ -15,11 +15,13 @@ type WorkspaceAction =
   | { type: 'set-stage'; missionId: string; stageId: string }
   | { type: 'advance-stage'; missionId: string }
   | { type: 'update-lane-status'; missionId: string; stageId: string; laneId: string; status: AgentStatus }
+  | { type: 'update-lane-confidence'; missionId: string; stageId: string; laneId: string; confidence: number }
   | { type: 'update-lane-output'; missionId: string; stageId: string; laneId: string; output: string }
   | { type: 'add-finding'; missionId: string; stageId: string; laneId: string; text: string }
   | { type: 'add-evidence'; missionId: string; evidence: Omit<EvidenceItem, 'id' | 'createdAt'> }
   | { type: 'toggle-approval'; missionId: string; approvalId: string }
   | { type: 'update-handoff'; missionId: string; output: Partial<HandoffDraft> }
+  | { type: 'draft-handoff-from-evidence'; missionId: string; stageId: string; laneId: string }
   | { type: 'reset-workspace' }
 
 const now = () => new Date().toISOString()
@@ -56,6 +58,20 @@ function isStageLocked(state: WorkspaceState, missionId: string, nextStageName: 
   )
 }
 
+function canEnterStage(mission: WorkspaceState['missions'][number], targetStageId: string) {
+  const targetIndex = mission.stages.findIndex((stage) => stage.id === targetStageId)
+
+  if (targetIndex <= 0) {
+    return targetIndex === 0
+  }
+
+  const requiredStageNames = new Set(mission.stages.slice(1, targetIndex + 1).map((stage) => stage.name))
+
+  return mission.approvals.every(
+    (approval) => !requiredStageNames.has(approval.requiredBefore) || approval.approved,
+  )
+}
+
 export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): WorkspaceState {
   switch (action.type) {
     case 'create-mission': {
@@ -76,10 +92,12 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
 
     case 'set-stage':
       return mutateMission(state, action.missionId, (mission) =>
-        touch({
-          ...mission,
-          activeStageId: action.stageId,
-        }),
+        canEnterStage(mission, action.stageId)
+          ? touch({
+              ...mission,
+              activeStageId: action.stageId,
+            })
+          : mission,
       )
 
     case 'advance-stage':
@@ -107,6 +125,25 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
                   ...stage,
                   lanes: stage.lanes.map((lane) =>
                     lane.id === action.laneId ? { ...lane, status: action.status } : lane,
+                  ),
+                }
+              : stage,
+          ),
+        }),
+      )
+
+    case 'update-lane-confidence':
+      return mutateMission(state, action.missionId, (mission) =>
+        touch({
+          ...mission,
+          stages: mission.stages.map((stage) =>
+            stage.id === action.stageId
+              ? {
+                  ...stage,
+                  lanes: stage.lanes.map((lane) =>
+                    lane.id === action.laneId
+                      ? { ...lane, confidence: Math.max(0, Math.min(100, action.confidence)) }
+                      : lane,
                   ),
                 }
               : stage,
@@ -202,6 +239,36 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
           },
         }),
       )
+
+    case 'draft-handoff-from-evidence':
+      return mutateMission(state, action.missionId, (mission) => {
+        const stage = mission.stages.find((item) => item.id === action.stageId)
+        const lane = stage?.lanes.find((item) => item.id === action.laneId)
+        const evidence = mission.evidence.filter(
+          (item) =>
+            item.stageId === action.stageId ||
+            item.agentId === action.laneId ||
+            lane?.assignedEvidenceIds.includes(item.id),
+        )
+
+        if (!stage || !lane || evidence.length === 0) {
+          return mission
+        }
+
+        const evidenceSummary = evidence
+          .slice(0, 4)
+          .map((item) => `[${item.kind}] ${item.title}: ${item.detail}`)
+          .join('\n')
+        const laneDraft = `${stage.name} / ${lane.name}\n${evidenceSummary}`
+
+        return touch({
+          ...mission,
+          outputs: {
+            ...mission.outputs,
+            summary: [mission.outputs.summary, laneDraft].filter(Boolean).join('\n\n'),
+          },
+        })
+      })
 
     case 'reset-workspace':
       return createDefaultWorkspace()

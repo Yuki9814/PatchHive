@@ -2,7 +2,7 @@ import { createSeedMission, missionTemplates } from './templates'
 import type { WorkspaceState } from './types'
 
 const STORAGE_KEY = 'patchhive.workspace.v1'
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 export function createDefaultWorkspace(): WorkspaceState {
   const seedMission = createSeedMission()
@@ -27,8 +27,44 @@ function isWorkspace(value: unknown): value is WorkspaceState {
   return (
     Array.isArray(candidate.missions) &&
     typeof candidate.activeMissionId === 'string' &&
-    candidate.settings?.schemaVersion === SCHEMA_VERSION
+    typeof candidate.settings?.schemaVersion === 'number'
   )
+}
+
+function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
+  const activeMissionId = candidate.missions.some((mission) => mission.id === candidate.activeMissionId)
+    ? candidate.activeMissionId
+    : candidate.missions[0]?.id
+  const defaultWorkspace = createDefaultWorkspace()
+
+  if (!activeMissionId) {
+    return defaultWorkspace
+  }
+
+  return {
+    ...candidate,
+    activeMissionId,
+    templates: missionTemplates,
+    missions: candidate.missions.map((mission) => ({
+      ...mission,
+      evidence: (mission.evidence ?? []).map((item) => ({
+        ...item,
+        stageId: item.stageId ?? mission.activeStageId,
+      })),
+      outputs: {
+        summary: mission.outputs?.summary ?? mission.goal ?? '',
+        patchPlan: mission.outputs?.patchPlan ?? '',
+        testPlan: mission.outputs?.testPlan ?? '',
+        risks: mission.outputs?.risks ?? 'Risk review pending.',
+        maintainerComment: mission.outputs?.maintainerComment ?? '',
+        ready: mission.outputs?.ready ?? false,
+      },
+    })),
+    settings: {
+      ...candidate.settings,
+      schemaVersion: SCHEMA_VERSION,
+    },
+  }
 }
 
 export function loadWorkspace(): WorkspaceState {
@@ -49,10 +85,7 @@ export function loadWorkspace(): WorkspaceState {
       return createDefaultWorkspace()
     }
 
-    return {
-      ...parsed,
-      templates: missionTemplates,
-    }
+    return migrateWorkspace(parsed)
   } catch {
     return createDefaultWorkspace()
   }

@@ -123,7 +123,7 @@ export const missionTemplates: MissionTemplate[] = [
         id: 'assumptions',
         label: 'Assumptions accepted',
         riskLevel: 'medium',
-        requiredBefore: 'Implementation plan',
+        requiredBefore: 'Reproduction',
       },
       {
         id: 'response',
@@ -168,7 +168,7 @@ export const missionTemplates: MissionTemplate[] = [
         id: 'risk-summary',
         label: 'Risk summary approved',
         riskLevel: 'high',
-        requiredBefore: 'Release candidate notes',
+        requiredBefore: 'Draft',
       },
       {
         id: 'release-copy',
@@ -223,7 +223,7 @@ function makeStages(template: MissionTemplate): MissionStage[] {
   }))
 }
 
-function makeInitialEvidence(input: ComposerInput, source: MissionSource): EvidenceItem[] {
+function makeInitialEvidence(input: ComposerInput, source: MissionSource, stageId: string): EvidenceItem[] {
   const createdAt = now()
   const evidence: EvidenceItem[] = [
     {
@@ -236,6 +236,7 @@ function makeInitialEvidence(input: ComposerInput, source: MissionSource): Evide
           : input.sourceText.slice(0, 220) || 'Manual mission source captured.',
       sourceText: input.sourceText,
       url: source.kind === 'github-url' ? source.url : undefined,
+      stageId,
       createdAt,
     },
   ]
@@ -246,6 +247,7 @@ function makeInitialEvidence(input: ComposerInput, source: MissionSource): Evide
       kind: 'decision',
       title: 'Repository parsed',
       detail: `${source.parsedRepo}${source.parsedNumber ? ` #${source.parsedNumber}` : ''}`,
+      stageId,
       createdAt,
     })
   }
@@ -280,7 +282,7 @@ export function createMissionFromInput(input: ComposerInput): Mission {
     constraints: constraints.length > 0 ? constraints : template.defaultConstraints,
     stages,
     activeStageId: stages[0].id,
-    evidence: makeInitialEvidence(input, source),
+    evidence: makeInitialEvidence(input, source, stages[0].id),
     approvals: template.approvalBlueprints.map((approval) => ({
       ...approval,
       approved: false,
