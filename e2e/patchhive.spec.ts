@@ -22,8 +22,9 @@ test('creates a mission, links evidence, and unlocks handoff export', async ({ p
   await expect(page.getByRole('heading', { name: 'Patch Plan' })).toBeVisible()
 
   const inspector = page.getByLabel('Evidence, approvals, and handoff')
-  await inspector.getByLabel('Stage').selectOption('patch-plan')
-  await inspector.getByLabel('Agent').selectOption('patch-agent')
+  const evidenceForm = inspector.locator('.evidence-form')
+  await evidenceForm.getByLabel('Stage').selectOption('patch-plan')
+  await evidenceForm.getByLabel('Agent').selectOption('patch-agent')
   await inspector.getByPlaceholder('Evidence title').fill('Playwright regression proof')
   await inspector
     .getByPlaceholder('What this proves or changes')

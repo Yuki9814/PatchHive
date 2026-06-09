@@ -101,6 +101,8 @@ export type MissionTemplate = {
 export type WorkspaceSettings = {
   schemaVersion: number
   density: 'comfortable' | 'compact'
+  mobilePanel: 'missions' | 'work' | 'inspector'
+  showGuidance: boolean
 }
 
 export type WorkspaceState = {

@@ -3,13 +3,19 @@
   width: 100%;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 380px;
+  grid-template-rows: auto 1fr;
   background: var(--color-bg);
   color: var(--color-text);
   overflow-x: clip;
 }
 
+.mobile-panel-switcher {
+  display: none;
+}
+
 .sidebar,
 .inspector {
+  grid-row: 2;
   min-width: 0;
   position: sticky;
   top: 0;
@@ -19,6 +25,7 @@
 }
 
 .sidebar {
+  grid-column: 1;
   border-right: 1px solid var(--color-border);
   padding: 20px;
   display: flex;
@@ -27,11 +34,14 @@
 }
 
 .inspector {
+  grid-column: 3;
   border-left: 1px solid var(--color-border);
   padding: 16px;
 }
 
 .mission-workspace {
+  grid-column: 2;
+  grid-row: 2;
   min-width: 0;
   padding: 20px;
   display: grid;
@@ -158,6 +168,31 @@ select:focus-visible {
   border-top: 1px solid var(--color-border);
 }
 
+.local-data-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.local-data-actions .subtle-button {
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.file-input {
+  display: none;
+}
+
+.guidance-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guidance-toggle input {
+  width: auto;
+}
+
 .mission-list {
   display: grid;
   gap: 8px;
@@ -272,6 +307,69 @@ select:focus-visible {
   color: var(--color-heading);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.health-panel {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px;
+}
+
+.health-score {
+  display: grid;
+  place-content: center;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #047857;
+  text-align: center;
+}
+
+.health-score span,
+.health-panel p span,
+.health-items span {
+  display: block;
+  color: var(--color-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.health-score strong {
+  color: #065f46;
+  font-size: 1.65rem;
+}
+
+.health-items {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.health-items article {
+  min-width: 0;
+  border-radius: 8px;
+  background: var(--color-soft);
+  padding: 10px;
+}
+
+.health-items strong,
+.health-panel p {
+  color: var(--color-heading);
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+.health-panel p {
+  grid-column: 1 / -1;
+  margin: 0;
+  border-top: 1px solid var(--color-border);
+  padding-top: 10px;
+  font-weight: 700;
 }
 
 .gate-banner {
@@ -503,12 +601,14 @@ textarea {
 }
 
 .evidence-toolbar {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   border-radius: 8px;
   background: var(--color-soft);
   padding: 10px;
 }
 
 .evidence-toolbar p {
+  grid-column: 1 / -1;
   margin: 0;
   color: var(--color-muted);
   font-size: 0.8rem;
@@ -589,6 +689,33 @@ textarea {
   min-height: 78px;
 }
 
+.handoff-field > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.handoff-field strong {
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 3px 7px;
+  text-transform: uppercase;
+}
+
+.handoff-field span strong {
+  min-width: 62px;
+  text-align: center;
+}
+
+.handoff-field strong.is-complete {
+  background: #dcfce7;
+  color: #166534;
+}
+
 .blocker-list,
 .source-preview {
   border: 1px solid rgba(217, 119, 6, 0.25);
@@ -615,6 +742,39 @@ textarea {
 
 .blocker-list p + p {
   margin-top: 4px;
+}
+
+.composer-readiness {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-soft);
+  padding: 10px;
+}
+
+.composer-readiness span {
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+.composer-readiness span.is-complete {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.composer-readiness p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.82rem;
 }
 
 .handoff-preview {
@@ -729,11 +889,13 @@ textarea {
 @media (max-width: 1180px) {
   .workspace-shell {
     grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
   }
 
   .inspector {
     position: static;
     grid-column: 1 / -1;
+    grid-row: 3;
     height: auto;
     border-left: 0;
     border-top: 1px solid var(--color-border);
@@ -744,6 +906,38 @@ textarea {
 @media (max-width: 900px) {
   .workspace-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .mobile-panel-switcher {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    grid-column: 1;
+    grid-row: 1;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    padding: 10px 12px;
+  }
+
+  .mobile-panel-switcher button {
+    min-height: 36px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--color-heading);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+
+  .mobile-panel-switcher button[aria-pressed='true'] {
+    border-color: rgba(37, 99, 235, 0.45);
+    background: #eff6ff;
+    color: #1d4ed8;
   }
 
   .sidebar,
@@ -753,15 +947,39 @@ textarea {
   }
 
   .sidebar {
+    grid-column: 1;
+    grid-row: 2;
     border-right: 0;
     border-bottom: 1px solid var(--color-border);
+  }
+
+  .mission-workspace {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .inspector {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .workspace-shell[data-mobile-panel='missions'] .mission-workspace,
+  .workspace-shell[data-mobile-panel='missions'] .inspector,
+  .workspace-shell[data-mobile-panel='work'] .sidebar,
+  .workspace-shell[data-mobile-panel='work'] .inspector,
+  .workspace-shell[data-mobile-panel='inspector'] .sidebar,
+  .workspace-shell[data-mobile-panel='inspector'] .mission-workspace {
+    display: none;
   }
 
   .mission-list,
   .context-strip,
   .stage-tabs,
   .lane-grid,
-  .inspector {
+  .inspector,
+  .health-panel,
+  .health-items,
+  .evidence-toolbar {
     grid-template-columns: 1fr;
   }
 
@@ -773,6 +991,10 @@ textarea {
 
   .topbar-actions {
     width: 100%;
+  }
+
+  .health-panel p {
+    grid-column: auto;
   }
 }
 

@@ -1,10 +1,11 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useEffect, useRef, useReducer, useState } from 'react'
 import './App.css'
 import { buildHandoffMarkdown, getHandoffBlockers, isHandoffReady } from './handoff'
-import { loadWorkspace, saveWorkspace } from './storage'
+import { getHandoffFieldStatuses, getMissionHealth } from './missionHealth'
+import { loadWorkspace, parseWorkspaceImport, saveWorkspace, serializeWorkspaceExport } from './storage'
 import { missionTemplates, parseGithubSource } from './templates'
 import type { AgentStatus, ComposerInput, EvidenceKind, Mission, MissionTemplate } from './types'
-import type { FormEvent } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 import { workspaceReducer } from './workspaceReducer'
 
 type EvidenceForm = {
@@ -101,8 +102,11 @@ function App() {
   const [composer, setComposer] = useState<ComposerInput>(() => createComposerInput())
   const [evidenceForm, setEvidenceForm] = useState<EvidenceForm>(() => emptyEvidenceForm())
   const [evidenceFilter, setEvidenceFilter] = useState<'all' | 'unlinked' | EvidenceKind>('all')
+  const [evidenceStageFilter, setEvidenceStageFilter] = useState('all')
+  const [evidenceAgentFilter, setEvidenceAgentFilter] = useState('all')
   const [findingDrafts, setFindingDrafts] = useState<Record<string, string>>({})
   const [statusMessage, setStatusMessage] = useState('Workspace loaded.')
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     saveWorkspace(state)
@@ -113,9 +117,20 @@ function App() {
   const handoffMarkdown = activeMission ? buildHandoffMarkdown(activeMission) : ''
   const handoffReady = activeMission ? isHandoffReady(activeMission) : false
   const handoffBlockers = activeMission ? getHandoffBlockers(activeMission) : []
+  const missionHealth = activeMission ? getMissionHealth(activeMission) : undefined
+  const handoffFieldStatuses = activeMission ? getHandoffFieldStatuses(activeMission) : []
+  const handoffFieldStatusMap = Object.fromEntries(
+    handoffFieldStatuses.map((field) => [field.key, field]),
+  )
   const stageLockReason = activeMission ? getLockedStageReason(activeMission) : ''
   const currentLanes = activeStage?.lanes ?? []
+  const missionLanes = activeMission?.stages.flatMap((stage) => stage.lanes) ?? []
   const parsedComposerSource = parseGithubSource(composer.sourceText)
+  const composerSourceReady =
+    composer.sourceKind === 'github-url'
+      ? Boolean(parsedComposerSource.parsedRepo)
+      : composer.sourceText.trim().length > 0
+  const composerScopeReady = Boolean(composer.title.trim() && composer.goal.trim())
   const filteredEvidence =
     activeMission?.evidence.filter((evidence) => {
       if (evidenceFilter === 'all') {
@@ -127,6 +142,17 @@ function App() {
       }
 
       return evidence.kind === evidenceFilter
+    })
+    .filter((evidence) => {
+      if (evidenceStageFilter !== 'all' && evidence.stageId !== evidenceStageFilter) {
+        return false
+      }
+
+      if (evidenceAgentFilter !== 'all' && evidence.agentId !== evidenceAgentFilter) {
+        return false
+      }
+
+      return true
     }) ?? []
   const unlinkedEvidenceCount =
     activeMission?.evidence.filter((evidence) => !evidence.stageId && !evidence.agentId).length ?? 0
@@ -235,6 +261,45 @@ function App() {
     setStatusMessage('Handoff Markdown downloaded.')
   }
 
+  const exportWorkspace = () => {
+    const blob = new Blob([serializeWorkspaceExport(state)], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'patchhive-workspace.json'
+    link.click()
+    URL.revokeObjectURL(url)
+    setStatusMessage('Workspace JSON downloaded.')
+  }
+
+  const importWorkspace = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      return
+    }
+
+    try {
+      const importedWorkspace = parseWorkspaceImport(await file.text())
+      dispatch({ type: 'replace-workspace', workspace: importedWorkspace })
+      setStatusMessage('Workspace JSON imported.')
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Workspace import failed.')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const resetWorkspace = () => {
+    if (!window.confirm('Reset PatchHive to sample data? Current local workspace data will be replaced.')) {
+      setStatusMessage('Workspace reset cancelled.')
+      return
+    }
+
+    dispatch({ type: 'reset-workspace' })
+    setStatusMessage('Workspace reset to sample data.')
+  }
+
   if (!activeMission || !activeStage) {
     return (
       <main className="empty-app">
@@ -248,7 +313,31 @@ function App() {
   }
 
   return (
-    <main className="workspace-shell">
+    <main className="workspace-shell" data-mobile-panel={state.settings.mobilePanel}>
+      <nav className="mobile-panel-switcher" aria-label="Mobile workspace panels">
+        <button
+          aria-pressed={state.settings.mobilePanel === 'missions'}
+          type="button"
+          onClick={() => dispatch({ type: 'update-settings', settings: { mobilePanel: 'missions' } })}
+        >
+          Missions
+        </button>
+        <button
+          aria-pressed={state.settings.mobilePanel === 'work'}
+          type="button"
+          onClick={() => dispatch({ type: 'update-settings', settings: { mobilePanel: 'work' } })}
+        >
+          Work
+        </button>
+        <button
+          aria-pressed={state.settings.mobilePanel === 'inspector'}
+          type="button"
+          onClick={() => dispatch({ type: 'update-settings', settings: { mobilePanel: 'inspector' } })}
+        >
+          Inspector
+        </button>
+      </nav>
+
       <aside className="sidebar" aria-label="Mission navigation">
         <div className="brand-row">
           <div className="brand-mark">PH</div>
@@ -291,16 +380,34 @@ function App() {
         <div className="sidebar-section sidebar-section--bottom">
           <p className="section-label">Local data</p>
           <p className="muted-copy">Missions save in browser storage. No OAuth, server, or model calls in v1.</p>
-          <button
-            className="subtle-button"
-            type="button"
-            onClick={() => {
-              dispatch({ type: 'reset-workspace' })
-              setStatusMessage('Workspace reset to sample data.')
-            }}
-          >
-            Reset sample
-          </button>
+          <label className="guidance-toggle">
+            <input
+              type="checkbox"
+              checked={state.settings.showGuidance}
+              onChange={(event) =>
+                dispatch({ type: 'update-settings', settings: { showGuidance: event.target.checked } })
+              }
+            />
+            Show guidance
+          </label>
+          <div className="local-data-actions">
+            <button className="subtle-button" type="button" onClick={exportWorkspace}>
+              Export JSON
+            </button>
+            <button className="subtle-button" type="button" onClick={() => importInputRef.current?.click()}>
+              Import JSON
+            </button>
+            <button className="subtle-button" type="button" onClick={resetWorkspace}>
+              Reset sample
+            </button>
+          </div>
+          <input
+            ref={importInputRef}
+            className="file-input"
+            type="file"
+            accept="application/json,.json"
+            onChange={importWorkspace}
+          />
         </div>
       </aside>
 
@@ -350,6 +457,37 @@ function App() {
             </strong>
           </div>
         </section>
+
+        {missionHealth ? (
+          <section className="health-panel" aria-label="Mission health">
+            <div className="health-score">
+              <span>Mission health</span>
+              <strong>{missionHealth.score}%</strong>
+            </div>
+            <div className="health-items">
+              <article>
+                <span>Stage</span>
+                <strong>{missionHealth.stageName}</strong>
+              </article>
+              <article>
+                <span>Evidence</span>
+                <strong>{missionHealth.evidenceGap}</strong>
+              </article>
+              <article>
+                <span>Approvals</span>
+                <strong>{missionHealth.approvalGap}</strong>
+              </article>
+              <article>
+                <span>Handoff</span>
+                <strong>{missionHealth.handoffGap}</strong>
+              </article>
+            </div>
+            <p>
+              <span>Next step</span>
+              {missionHealth.nextStep}
+            </p>
+          </section>
+        ) : null}
 
         {stageLockReason ? <div className="gate-banner">{stageLockReason}</div> : null}
 
@@ -594,7 +732,7 @@ function App() {
 
           <div className="evidence-toolbar">
             <label>
-              Filter
+              Type filter
               <select
                 value={evidenceFilter}
                 onChange={(event) => setEvidenceFilter(event.target.value as typeof evidenceFilter)}
@@ -604,6 +742,34 @@ function App() {
                 {evidenceKinds.map((kind) => (
                   <option key={kind} value={kind}>
                     {kind}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Stage filter
+              <select
+                value={evidenceStageFilter}
+                onChange={(event) => setEvidenceStageFilter(event.target.value)}
+              >
+                <option value="all">All stages</option>
+                {activeMission.stages.map((stage) => (
+                  <option key={stage.id} value={stage.id}>
+                    {stage.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Agent filter
+              <select
+                value={evidenceAgentFilter}
+                onChange={(event) => setEvidenceAgentFilter(event.target.value)}
+              >
+                <option value="all">All agents</option>
+                {missionLanes.map((lane, index) => (
+                  <option key={`${lane.id}-${index}`} value={lane.id}>
+                    {lane.name}
                   </option>
                 ))}
               </select>
@@ -683,8 +849,13 @@ function App() {
             </div>
           ) : null}
 
-          <label>
-            Summary
+          <label className="handoff-field">
+            <span>
+              Summary
+              <strong className={handoffFieldStatusMap.summary?.complete ? 'is-complete' : ''}>
+                {handoffFieldStatusMap.summary?.complete ? 'Done' : 'Missing'}
+              </strong>
+            </span>
             <textarea
               value={activeMission.outputs.summary}
               onChange={(event) =>
@@ -696,8 +867,13 @@ function App() {
               }
             />
           </label>
-          <label>
-            Patch plan
+          <label className="handoff-field">
+            <span>
+              Patch plan
+              <strong className={handoffFieldStatusMap.patchPlan?.complete ? 'is-complete' : ''}>
+                {handoffFieldStatusMap.patchPlan?.complete ? 'Done' : 'Missing'}
+              </strong>
+            </span>
             <textarea
               value={activeMission.outputs.patchPlan}
               onChange={(event) =>
@@ -709,8 +885,13 @@ function App() {
               }
             />
           </label>
-          <label>
-            Test plan
+          <label className="handoff-field">
+            <span>
+              Test plan
+              <strong className={handoffFieldStatusMap.testPlan?.complete ? 'is-complete' : ''}>
+                {handoffFieldStatusMap.testPlan?.complete ? 'Done' : 'Missing'}
+              </strong>
+            </span>
             <textarea
               value={activeMission.outputs.testPlan}
               onChange={(event) =>
@@ -722,8 +903,13 @@ function App() {
               }
             />
           </label>
-          <label>
-            Risks
+          <label className="handoff-field">
+            <span>
+              Risks
+              <strong className={handoffFieldStatusMap.risks?.complete ? 'is-complete' : ''}>
+                {handoffFieldStatusMap.risks?.complete ? 'Done' : 'Missing'}
+              </strong>
+            </span>
             <textarea
               value={activeMission.outputs.risks}
               onChange={(event) =>
@@ -735,8 +921,13 @@ function App() {
               }
             />
           </label>
-          <label>
-            Maintainer comment
+          <label className="handoff-field">
+            <span>
+              Maintainer comment
+              <strong className={handoffFieldStatusMap.maintainerComment?.complete ? 'is-complete' : ''}>
+                {handoffFieldStatusMap.maintainerComment?.complete ? 'Done' : 'Missing'}
+              </strong>
+            </span>
             <textarea
               value={activeMission.outputs.maintainerComment}
               onChange={(event) =>
@@ -834,6 +1025,17 @@ function App() {
                         : `${composer.sourceText.trim().length} characters captured.`}
                   </p>
                 </div>
+                {state.settings.showGuidance ? (
+                  <div className="composer-readiness" aria-label="Mission composer readiness">
+                    <span className={composerSourceReady ? 'is-complete' : ''}>
+                      {composerSourceReady ? 'Ready source' : 'Source needed'}
+                    </span>
+                    <span className={composerScopeReady ? 'is-complete' : ''}>
+                      {composerScopeReady ? 'Scope ready' : 'Scope needed'}
+                    </span>
+                    <p>After creation, attach evidence and clear the first approval gate.</p>
+                  </div>
+                ) : null}
               </fieldset>
 
               <fieldset>

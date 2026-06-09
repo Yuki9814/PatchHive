@@ -2,7 +2,7 @@ import { createSeedMission, missionTemplates } from './templates'
 import type { WorkspaceState } from './types'
 
 const STORAGE_KEY = 'patchhive.workspace.v1'
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 export function createDefaultWorkspace(): WorkspaceState {
   const seedMission = createSeedMission()
@@ -14,6 +14,8 @@ export function createDefaultWorkspace(): WorkspaceState {
     settings: {
       schemaVersion: SCHEMA_VERSION,
       density: 'compact',
+      mobilePanel: 'work',
+      showGuidance: true,
     },
   }
 }
@@ -63,8 +65,36 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
     settings: {
       ...candidate.settings,
       schemaVersion: SCHEMA_VERSION,
+      density: candidate.settings?.density ?? defaultWorkspace.settings.density,
+      mobilePanel: candidate.settings?.mobilePanel ?? defaultWorkspace.settings.mobilePanel,
+      showGuidance: candidate.settings?.showGuidance ?? defaultWorkspace.settings.showGuidance,
     },
   }
+}
+
+export function parseWorkspaceImport(rawJson: string): WorkspaceState {
+  const parsed = JSON.parse(rawJson)
+
+  if (!isWorkspace(parsed)) {
+    throw new Error('Imported file is not a PatchHive workspace.')
+  }
+
+  return migrateWorkspace(parsed)
+}
+
+export function serializeWorkspaceExport(state: WorkspaceState) {
+  return JSON.stringify(
+    {
+      ...state,
+      templates: missionTemplates,
+      settings: {
+        ...state.settings,
+        schemaVersion: SCHEMA_VERSION,
+      },
+    },
+    null,
+    2,
+  )
 }
 
 export function loadWorkspace(): WorkspaceState {
@@ -98,14 +128,7 @@ export function saveWorkspace(state: WorkspaceState) {
 
   window.localStorage.setItem(
     STORAGE_KEY,
-    JSON.stringify({
-      ...state,
-      templates: missionTemplates,
-      settings: {
-        ...state.settings,
-        schemaVersion: SCHEMA_VERSION,
-      },
-    }),
+    serializeWorkspaceExport(state),
   )
 }
 

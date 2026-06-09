@@ -6,6 +6,7 @@ import type {
   EvidenceItem,
   EvidenceKind,
   HandoffDraft,
+  WorkspaceSettings,
   WorkspaceState,
 } from './types'
 
@@ -22,6 +23,8 @@ type WorkspaceAction =
   | { type: 'toggle-approval'; missionId: string; approvalId: string }
   | { type: 'update-handoff'; missionId: string; output: Partial<HandoffDraft> }
   | { type: 'draft-handoff-from-evidence'; missionId: string; stageId: string; laneId: string }
+  | { type: 'replace-workspace'; workspace: WorkspaceState }
+  | { type: 'update-settings'; settings: Partial<WorkspaceSettings> }
   | { type: 'reset-workspace' }
 
 const now = () => new Date().toISOString()
@@ -269,6 +272,18 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
           },
         })
       })
+
+    case 'replace-workspace':
+      return action.workspace
+
+    case 'update-settings':
+      return {
+        ...state,
+        settings: {
+          ...state.settings,
+          ...action.settings,
+        },
+      }
 
     case 'reset-workspace':
       return createDefaultWorkspace()
