@@ -33,10 +33,11 @@ describe('missionHealth', () => {
 
     const health = getMissionHealth(mission)
 
-    expect(health.score).toBe(25)
+    expect(health.score).toBe(20)
     expect(health.evidenceGap).toContain('Link 1 evidence')
     expect(health.approvalGap).toContain('2 approval')
     expect(health.handoffGap).toContain('2 handoff')
+    expect(health.handoffSourceCount).toBe(0)
     expect(health.nextStep).toBe('Patch scope approved before Patch Plan')
   })
 
@@ -52,5 +53,6 @@ describe('missionHealth', () => {
 
     expect(fields.find((field) => field.key === 'summary')?.complete).toBe(false)
     expect(fields.find((field) => field.key === 'risks')?.complete).toBe(true)
+    expect(fields.find((field) => field.key === 'summary')?.sourceCount).toBe(0)
   })
 })

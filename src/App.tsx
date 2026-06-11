@@ -6,7 +6,13 @@ import { MissionSidebar } from './components/MissionSidebar'
 import { MissionWorkspace } from './components/MissionWorkspace'
 import { buildHandoffMarkdown, getHandoffBlockers, getNextStageGateBlocker, isHandoffReady } from './handoff'
 import { getHandoffFieldStatuses, getMissionHealth } from './missionHealth'
-import { loadWorkspace, parseWorkspaceImport, saveWorkspace, serializeWorkspaceExport } from './storage'
+import {
+  MAX_WORKSPACE_IMPORT_BYTES,
+  loadWorkspace,
+  previewWorkspaceImport,
+  saveWorkspace,
+  serializeWorkspaceExport,
+} from './storage'
 import { parseGithubSource } from './templates'
 import type { ChangeEvent, FormEvent } from 'react'
 import { workspaceReducer } from './workspaceReducer'
@@ -20,6 +26,8 @@ import {
   type EvidenceForm,
 } from './workspaceUi'
 
+type InspectorPanel = 'evidence' | 'approvals' | 'handoff'
+
 function App() {
   const [state, dispatch] = useReducer(workspaceReducer, undefined, loadWorkspace)
   const [composerOpen, setComposerOpen] = useState(false)
@@ -28,6 +36,7 @@ function App() {
   const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>('all')
   const [evidenceStageFilter, setEvidenceStageFilter] = useState('all')
   const [evidenceAgentFilter, setEvidenceAgentFilter] = useState('all')
+  const [editingEvidenceId, setEditingEvidenceId] = useState<string | null>(null)
   const [findingDrafts, setFindingDrafts] = useState<Record<string, string>>({})
   const [statusMessage, setStatusMessage] = useState('Workspace loaded.')
   const importInputRef = useRef<HTMLInputElement>(null)
@@ -98,6 +107,17 @@ function App() {
     setComposer(createComposerInput(getTemplate(templateId)))
   }
 
+  const openInspectorPanel = (panel: InspectorPanel) => {
+    dispatch({ type: 'update-settings', settings: { mobilePanel: 'inspector' } })
+    window.requestAnimationFrame(() => {
+      const target = document.getElementById(`panel-${panel}`)
+
+      if (typeof target?.scrollIntoView === 'function') {
+        target.scrollIntoView({ block: 'start' })
+      }
+    })
+  }
+
   const createMission = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -117,7 +137,7 @@ function App() {
     setStatusMessage('Mission created and selected.')
   }
 
-  const addEvidence = (event: FormEvent<HTMLFormElement>) => {
+  const submitEvidence = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (!evidenceForm.title.trim() || !evidenceForm.detail.trim()) {
@@ -125,22 +145,81 @@ function App() {
       return
     }
 
-    dispatch({
-      type: 'add-evidence',
-      missionId: activeMission.id,
-      evidence: {
-        kind: evidenceForm.kind,
-        title: evidenceForm.title.trim(),
-        detail: evidenceForm.detail.trim(),
-        sourceText: evidenceForm.sourceText.trim() || undefined,
-        url: evidenceForm.url.trim() || undefined,
-        filePath: evidenceForm.filePath.trim() || undefined,
-        stageId: evidenceForm.stageId || undefined,
-        agentId: evidenceForm.agentId || undefined,
-      },
-    })
+    const evidencePayload = {
+      kind: evidenceForm.kind,
+      title: evidenceForm.title.trim(),
+      detail: evidenceForm.detail.trim(),
+      sourceText: evidenceForm.sourceText.trim() || undefined,
+      url: evidenceForm.url.trim() || undefined,
+      filePath: evidenceForm.filePath.trim() || undefined,
+      stageId: evidenceForm.stageId || undefined,
+      agentId: evidenceForm.agentId || undefined,
+    }
+
+    if (editingEvidenceId) {
+      dispatch({
+        type: 'update-evidence',
+        missionId: activeMission.id,
+        evidenceId: editingEvidenceId,
+        evidence: evidencePayload,
+      })
+      setStatusMessage('Evidence updated.')
+    } else {
+      dispatch({
+        type: 'add-evidence',
+        missionId: activeMission.id,
+        evidence: evidencePayload,
+      })
+      setStatusMessage('Evidence attached to the mission.')
+    }
+
+    setEditingEvidenceId(null)
     setEvidenceForm(emptyEvidenceForm())
-    setStatusMessage('Evidence attached to the mission.')
+  }
+
+  const startEvidenceEdit = (evidenceId: string) => {
+    const evidence = activeMission.evidence.find((item) => item.id === evidenceId)
+
+    if (!evidence) {
+      setStatusMessage('Evidence record was not found.')
+      return
+    }
+
+    setEditingEvidenceId(evidenceId)
+    setEvidenceForm({
+      kind: evidence.kind,
+      title: evidence.title,
+      detail: evidence.detail,
+      sourceText: evidence.sourceText ?? '',
+      url: evidence.url ?? '',
+      filePath: evidence.filePath ?? '',
+      stageId: evidence.stageId ?? '',
+      agentId: evidence.agentId ?? '',
+    })
+    openInspectorPanel('evidence')
+    setStatusMessage('Evidence loaded for editing.')
+  }
+
+  const cancelEvidenceEdit = () => {
+    setEditingEvidenceId(null)
+    setEvidenceForm(emptyEvidenceForm())
+    setStatusMessage('Evidence edit cancelled.')
+  }
+
+  const deleteEvidence = (evidenceId: string) => {
+    if (!window.confirm('Delete this evidence record? Handoff source links for it will be removed.')) {
+      setStatusMessage('Evidence deletion cancelled.')
+      return
+    }
+
+    dispatch({ type: 'delete-evidence', missionId: activeMission.id, evidenceId })
+
+    if (editingEvidenceId === evidenceId) {
+      setEditingEvidenceId(null)
+      setEvidenceForm(emptyEvidenceForm())
+    }
+
+    setStatusMessage('Evidence deleted.')
   }
 
   const addFinding = (stageId: string, laneId: string) => {
@@ -211,9 +290,28 @@ function App() {
       return
     }
 
+    if (file.size > MAX_WORKSPACE_IMPORT_BYTES) {
+      setStatusMessage('Workspace import is too large for local preview.')
+      event.target.value = ''
+      return
+    }
+
     try {
-      const importedWorkspace = parseWorkspaceImport(await file.text())
-      dispatch({ type: 'replace-workspace', workspace: importedWorkspace })
+      const preview = previewWorkspaceImport(await file.text())
+      const warningText =
+        preview.warnings.length > 0 ? `\nWarnings: ${preview.warnings.join(' ')}` : ''
+      const confirmed = window.confirm(
+        `Import ${preview.missionCount} mission(s), ${preview.evidenceCount} evidence item(s), and ${preview.archivedCount} archived mission(s)? This replaces current local data. Export a backup first if needed.${warningText}`,
+      )
+
+      if (!confirmed) {
+        setStatusMessage('Workspace import cancelled.')
+        return
+      }
+
+      dispatch({ type: 'replace-workspace', workspace: preview.workspace })
+      setEditingEvidenceId(null)
+      setEvidenceForm(emptyEvidenceForm())
       setStatusMessage('Workspace JSON imported.')
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Workspace import failed.')
@@ -223,12 +321,18 @@ function App() {
   }
 
   const resetWorkspace = () => {
-    if (!window.confirm('Reset PatchHive to sample data? Current local workspace data will be replaced.')) {
+    if (
+      !window.confirm(
+        'Reset PatchHive to sample data? Current local workspace data will be replaced. Export a backup first if needed.',
+      )
+    ) {
       setStatusMessage('Workspace reset cancelled.')
       return
     }
 
     dispatch({ type: 'reset-workspace' })
+    setEditingEvidenceId(null)
+    setEvidenceForm(emptyEvidenceForm())
     setStatusMessage('Workspace reset to sample data.')
   }
 
@@ -280,12 +384,14 @@ function App() {
         nextStageGateBlocker={nextStageGateBlocker}
         onAddFinding={addFinding}
         onFindingDraftChange={(key, value) => setFindingDrafts((drafts) => ({ ...drafts, [key]: value }))}
+        onOpenInspectorPanel={openInspectorPanel}
         onStatusMessage={setStatusMessage}
       />
 
       <Inspector
         activeStage={activeStage}
         dispatch={dispatch}
+        editingEvidenceId={editingEvidenceId}
         evidenceAgentFilter={evidenceAgentFilter}
         evidenceFilter={evidenceFilter}
         evidenceForm={evidenceForm}
@@ -296,14 +402,17 @@ function App() {
         handoffMarkdown={handoffMarkdown}
         handoffReady={handoffReady}
         mission={activeMission}
-        onAddEvidence={addEvidence}
+        onCancelEvidenceEdit={cancelEvidenceEdit}
         onCopyHandoff={copyHandoff}
+        onDeleteEvidence={deleteEvidence}
         onDownloadHandoff={downloadHandoff}
         onEvidenceAgentFilterChange={setEvidenceAgentFilter}
         onEvidenceFilterChange={setEvidenceFilter}
         onEvidenceFormChange={setEvidenceForm}
         onEvidenceStageFilterChange={setEvidenceStageFilter}
+        onStartEvidenceEdit={startEvidenceEdit}
         onStatusMessage={setStatusMessage}
+        onSubmitEvidence={submitEvidence}
         unlinkedEvidenceCount={unlinkedEvidenceCount}
       />
 

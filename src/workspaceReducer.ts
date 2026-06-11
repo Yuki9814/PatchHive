@@ -6,7 +6,10 @@ import type {
   ComposerInput,
   EvidenceItem,
   EvidenceKind,
+  HandoffEvidenceTarget,
   HandoffDraft,
+  HandoffFieldKey,
+  MissionStatus,
   WorkspaceSettings,
   WorkspaceState,
 } from './types'
@@ -20,10 +23,25 @@ export type WorkspaceAction =
   | { type: 'update-lane-confidence'; missionId: string; stageId: string; laneId: string; confidence: number }
   | { type: 'update-lane-output'; missionId: string; stageId: string; laneId: string; output: string }
   | { type: 'add-finding'; missionId: string; stageId: string; laneId: string; text: string }
-  | { type: 'add-evidence'; missionId: string; evidence: Omit<EvidenceItem, 'id' | 'createdAt'> }
+  | { type: 'add-evidence'; missionId: string; evidence: Omit<EvidenceItem, 'id' | 'createdAt' | 'updatedAt'> }
+  | {
+      type: 'update-evidence'
+      missionId: string
+      evidenceId: string
+      evidence: Partial<Omit<EvidenceItem, 'id' | 'createdAt' | 'updatedAt'>>
+    }
+  | { type: 'delete-evidence'; missionId: string; evidenceId: string }
+  | { type: 'update-mission-status'; missionId: string; status: MissionStatus }
   | { type: 'toggle-approval'; missionId: string; approvalId: string }
   | { type: 'update-handoff'; missionId: string; output: Partial<HandoffDraft> }
-  | { type: 'draft-handoff-from-evidence'; missionId: string; stageId: string; laneId: string }
+  | {
+      type: 'draft-handoff-from-evidence'
+      missionId: string
+      stageId: string
+      laneId: string
+      targetField: HandoffEvidenceTarget
+    }
+  | { type: 'set-handoff-field-sources'; missionId: string; field: HandoffFieldKey; evidenceIds: string[] }
   | { type: 'replace-workspace'; workspace: WorkspaceState }
   | { type: 'update-settings'; settings: Partial<WorkspaceSettings> }
   | { type: 'reset-workspace' }
@@ -199,9 +217,58 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
               id: createId('evidence'),
               kind: action.evidence.kind as EvidenceKind,
               createdAt: now(),
+              updatedAt: now(),
             },
             ...mission.evidence,
           ],
+        }),
+      )
+
+    case 'update-evidence':
+      return mutateMission(state, action.missionId, (mission) =>
+        touch({
+          ...mission,
+          evidence: mission.evidence.map((evidence) =>
+            evidence.id === action.evidenceId
+              ? {
+                  ...evidence,
+                  ...action.evidence,
+                  updatedAt: now(),
+                }
+              : evidence,
+          ),
+        }),
+      )
+
+    case 'delete-evidence':
+      return mutateMission(state, action.missionId, (mission) =>
+        touch({
+          ...mission,
+          evidence: mission.evidence.filter((evidence) => evidence.id !== action.evidenceId),
+          stages: mission.stages.map((stage) => ({
+            ...stage,
+            lanes: stage.lanes.map((lane) => ({
+              ...lane,
+              assignedEvidenceIds: lane.assignedEvidenceIds.filter((id) => id !== action.evidenceId),
+            })),
+          })),
+          outputs: {
+            ...mission.outputs,
+            fieldSources: Object.fromEntries(
+              Object.entries(mission.outputs.fieldSources).map(([field, ids]) => [
+                field,
+                ids.filter((id) => id !== action.evidenceId),
+              ]),
+            ),
+          },
+        }),
+      )
+
+    case 'update-mission-status':
+      return mutateMission(state, action.missionId, (mission) =>
+        touch({
+          ...mission,
+          status: action.status,
         }),
       )
 
@@ -252,24 +319,37 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
           .map((item) => `[${item.kind}] ${item.title}: ${item.detail}`)
           .join('\n')
         const laneDraft = `${stage.name} / ${lane.name}\n${evidenceSummary}`
-        const evidenceKinds = new Set(evidence.map((item) => item.kind))
-        const targetField: keyof HandoffDraft =
-          evidenceKinds.has('diff') || lane.id === 'patch-agent'
-            ? 'patchPlan'
-            : evidenceKinds.has('log') || lane.id === 'test-agent'
-              ? 'testPlan'
-              : evidenceKinds.has('decision') || lane.id === 'review-agent'
-                ? 'risks'
-                : 'summary'
+        const fieldSources = new Set([
+          ...(mission.outputs.fieldSources[action.targetField] ?? []),
+          ...evidence.map((item) => item.id),
+        ])
 
         return touch({
           ...mission,
           outputs: {
             ...mission.outputs,
-            [targetField]: [mission.outputs[targetField], laneDraft].filter(Boolean).join('\n\n'),
+            [action.targetField]: [mission.outputs[action.targetField], laneDraft].filter(Boolean).join('\n\n'),
+            fieldSources: {
+              ...mission.outputs.fieldSources,
+              [action.targetField]: [...fieldSources],
+            },
           },
         })
       })
+
+    case 'set-handoff-field-sources':
+      return mutateMission(state, action.missionId, (mission) =>
+        touch({
+          ...mission,
+          outputs: {
+            ...mission.outputs,
+            fieldSources: {
+              ...mission.outputs.fieldSources,
+              [action.field]: action.evidenceIds.filter((id) => mission.evidence.some((evidence) => evidence.id === id)),
+            },
+          },
+        }),
+      )
 
     case 'replace-workspace':
       return action.workspace

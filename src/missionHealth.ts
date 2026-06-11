@@ -1,15 +1,12 @@
 import { getHandoffBlockers } from './handoff'
-import type { HandoffDraft, Mission } from './types'
-
-export type HandoffFieldKey = keyof Pick<
-  HandoffDraft,
-  'summary' | 'patchPlan' | 'testPlan' | 'risks' | 'maintainerComment'
->
+import { getHandoffEvidenceCoverage, getHandoffFieldSourceIds } from './handoffCoverage'
+import type { HandoffFieldKey, Mission } from './types'
 
 export type HandoffFieldStatus = {
   key: HandoffFieldKey
   label: string
   complete: boolean
+  sourceCount: number
   blocker: string
 }
 
@@ -23,6 +20,7 @@ export type MissionHealth = {
   unlinkedEvidenceCount: number
   pendingApprovalCount: number
   missingHandoffCount: number
+  handoffSourceCount: number
 }
 
 const handoffFields: Array<Pick<HandoffFieldStatus, 'key' | 'label' | 'blocker'>> = [
@@ -41,6 +39,7 @@ export function getHandoffFieldStatuses(mission: Mission): HandoffFieldStatus[] 
   return handoffFields.map((field) => ({
     ...field,
     complete: mission.outputs[field.key].trim().length > 0,
+    sourceCount: getHandoffFieldSourceIds(mission, field.key).length,
   }))
 }
 
@@ -49,6 +48,7 @@ export function getMissionHealth(mission: Mission): MissionHealth {
   const unlinkedEvidenceCount = mission.evidence.filter((item) => !item.stageId && !item.agentId).length
   const pendingApprovalCount = mission.approvals.filter((approval) => !approval.approved).length
   const missingHandoffCount = getHandoffFieldStatuses(mission).filter((field) => !field.complete).length
+  const handoffCoverage = getHandoffEvidenceCoverage(mission)
   const blockers = getHandoffBlockers(mission)
 
   const completedChecks = [
@@ -56,11 +56,12 @@ export function getMissionHealth(mission: Mission): MissionHealth {
     unlinkedEvidenceCount === 0,
     pendingApprovalCount === 0,
     missingHandoffCount === 0,
+    handoffCoverage.hasAnyCoverage,
   ].filter(Boolean).length
 
   return {
     stageName: stage?.name ?? 'No stage',
-    score: Math.round((completedChecks / 4) * 100),
+    score: Math.round((completedChecks / 5) * 100),
     evidenceGap:
       mission.evidence.length === 0
         ? 'Capture at least one evidence item.'
@@ -74,10 +75,13 @@ export function getMissionHealth(mission: Mission): MissionHealth {
     handoffGap:
       missingHandoffCount > 0
         ? `${missingHandoffCount} handoff field(s) need content.`
+        : !handoffCoverage.hasAnyCoverage
+          ? 'Map evidence into the handoff draft.'
         : 'Handoff fields are complete.',
     nextStep: blockers[0] ?? 'Export or copy the maintainer handoff.',
     unlinkedEvidenceCount,
     pendingApprovalCount,
     missingHandoffCount,
+    handoffSourceCount: handoffCoverage.sourceCount,
   }
 }

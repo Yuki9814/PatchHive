@@ -26,6 +26,12 @@ function readyMission() {
       approved: true,
       approvedAt: '2026-06-07T00:00:00.000Z',
     })),
+    outputs: {
+      ...mission.outputs,
+      fieldSources: {
+        summary: [mission.evidence[0].id],
+      },
+    },
   }
 }
 
@@ -80,6 +86,20 @@ describe('handoff', () => {
     expect(markdown).toContain('Edited maintainer summary.')
     expect(markdown).toContain('Regression risk is low after parser coverage.')
     expect(markdown).toContain('[link] Source GitHub thread')
+    expect(markdown).toContain('## Handoff Evidence Sources')
     expect(markdown).toContain('Maintainer-facing message approved')
+  })
+
+  it('blocks export until evidence is mapped into the handoff', () => {
+    const mission = {
+      ...readyMission(),
+      outputs: {
+        ...readyMission().outputs,
+        fieldSources: {},
+      },
+    }
+
+    expect(getHandoffBlockers(mission)).toContain('At least one handoff field needs evidence source coverage')
+    expect(isHandoffReady(mission)).toBe(false)
   })
 })

@@ -61,10 +61,12 @@ describe('workspaceReducer', () => {
       missionId: mission.id,
       stageId: stage.id,
       laneId: lane.id,
+      targetField: 'risks',
     })
 
     expect(withConfidence.missions[0].stages[0].lanes[0].confidence).toBe(100)
     expect(drafted.missions[0].outputs.risks).toContain('Scope locked')
+    expect(drafted.missions[0].outputs.fieldSources.risks).toContain(withEvidence.missions[0].evidence[0].id)
   })
 
   it('routes patch evidence into the patch plan draft', () => {
@@ -88,8 +90,45 @@ describe('workspaceReducer', () => {
       missionId: mission.id,
       stageId: stage.id,
       laneId: lane.id,
+      targetField: 'patchPlan',
     })
 
     expect(drafted.missions[0].outputs.patchPlan).toContain('Guard diff')
+  })
+
+  it('updates mission status and filters evidence source links after deletion', () => {
+    const state = createDefaultWorkspace()
+    const mission = state.missions[0]
+    const withEvidence = workspaceReducer(state, {
+      type: 'add-evidence',
+      missionId: mission.id,
+      evidence: {
+        kind: 'decision',
+        title: 'Scope note',
+        detail: 'Maintainer asked for a narrow patch.',
+        stageId: mission.activeStageId,
+      },
+    })
+    const evidenceId = withEvidence.missions[0].evidence[0].id
+    const sourced = workspaceReducer(withEvidence, {
+      type: 'set-handoff-field-sources',
+      missionId: mission.id,
+      field: 'summary',
+      evidenceIds: [evidenceId],
+    })
+    const archived = workspaceReducer(sourced, {
+      type: 'update-mission-status',
+      missionId: mission.id,
+      status: 'archived',
+    })
+    const deleted = workspaceReducer(archived, {
+      type: 'delete-evidence',
+      missionId: mission.id,
+      evidenceId,
+    })
+
+    expect(archived.missions[0].status).toBe('archived')
+    expect(deleted.missions[0].evidence.some((evidence) => evidence.id === evidenceId)).toBe(false)
+    expect(deleted.missions[0].outputs.fieldSources.summary).toEqual([])
   })
 })

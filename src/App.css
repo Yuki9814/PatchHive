@@ -198,19 +198,40 @@ select:focus-visible {
   gap: 8px;
 }
 
-.mission-row {
-  min-height: 76px;
+.mission-filter {
+  margin-bottom: 2px;
+}
+
+.mission-row-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: #fff;
+  padding: 8px;
+}
+
+.mission-row-card--active {
+  border-color: rgba(37, 99, 235, 0.5);
+  background: #eff6ff;
+}
+
+.mission-row {
+  width: 100%;
+  min-height: 76px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--color-text);
-  padding: 12px;
+  padding: 4px;
   text-align: left;
 }
 
-.mission-row--active {
-  border-color: rgba(37, 99, 235, 0.5);
-  background: #eff6ff;
+.mission-row-card select {
+  min-height: 34px;
+  background: #fff;
+  font-size: 0.78rem;
 }
 
 .mission-row span {
@@ -350,11 +371,16 @@ select:focus-visible {
   gap: 8px;
 }
 
-.health-items article {
+.health-items article,
+.health-items button {
   min-width: 0;
+  border: 0;
   border-radius: 8px;
   background: var(--color-soft);
+  color: inherit;
+  font: inherit;
   padding: 10px;
+  text-align: left;
 }
 
 .health-items strong,
@@ -531,6 +557,20 @@ select:focus-visible {
   color: var(--color-subtle);
 }
 
+.draft-targets,
+.evidence-form-actions,
+.evidence-item__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.draft-targets .subtle-button,
+.evidence-item__actions .subtle-button {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
 .inspector {
   display: grid;
   align-content: start;
@@ -623,6 +663,11 @@ textarea {
   padding: 10px;
 }
 
+.evidence-item {
+  display: grid;
+  gap: 7px;
+}
+
 .topbar p,
 .stage-summary p,
 .lane-card p,
@@ -634,9 +679,14 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.evidence-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .evidence-item span {
   display: inline-flex;
-  margin-bottom: 6px;
   border-radius: 999px;
   background: #dbeafe;
   color: #1d4ed8;
@@ -644,6 +694,25 @@ textarea {
   font-size: 0.7rem;
   padding: 3px 7px;
   text-transform: uppercase;
+}
+
+.evidence-item .evidence-status--unlinked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.evidence-item .evidence-status--linked {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.evidence-item .evidence-status--in-handoff {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.subtle-button--danger {
+  color: #991b1b;
 }
 
 .evidence-item small,

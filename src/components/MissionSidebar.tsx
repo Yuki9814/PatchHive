@@ -1,6 +1,7 @@
 import { isHandoffReady } from '../handoff'
 import type { WorkspaceState } from '../types'
 import type { WorkspaceAction } from '../workspaceReducer'
+import { getFilteredMissions, missionStatusFilters, missionStatusLabels, missionStatuses } from '../workspaceUi'
 import type { ChangeEvent, Dispatch, RefObject } from 'react'
 
 type MissionSidebarProps = {
@@ -26,6 +27,8 @@ export function MissionSidebar({
   onResetWorkspace,
   dispatch,
 }: MissionSidebarProps) {
+  const visibleMissions = getFilteredMissions(state.missions, state.settings.missionStatusFilter)
+
   return (
     <aside className="sidebar" aria-label="Mission navigation">
       <div className="brand-row">
@@ -42,26 +45,66 @@ export function MissionSidebar({
 
       <div className="sidebar-section">
         <p className="section-label">Active missions</p>
+        <label className="mission-filter">
+          Status filter
+          <select
+            value={state.settings.missionStatusFilter}
+            onChange={(event) =>
+              dispatch({
+                type: 'update-settings',
+                settings: { missionStatusFilter: event.target.value as WorkspaceState['settings']['missionStatusFilter'] },
+              })
+            }
+          >
+            {missionStatusFilters.map((status) => (
+              <option key={status} value={status}>
+                {missionStatusLabels[status]}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="mission-list">
-          {state.missions.map((mission) => {
+          {visibleMissions.map((mission) => {
             const ready = isHandoffReady(mission)
             const currentStage = mission.stages.find((stage) => stage.id === mission.activeStageId) ?? mission.stages[0]
 
             return (
-              <button
+              <article
                 key={mission.id}
-                aria-pressed={mission.id === activeMissionId}
-                className={`mission-row${mission.id === activeMissionId ? ' mission-row--active' : ''}`}
-                type="button"
-                onClick={() => dispatch({ type: 'select-mission', missionId: mission.id })}
+                className={`mission-row-card${mission.id === activeMissionId ? ' mission-row-card--active' : ''}`}
               >
-                <span>{mission.title}</span>
-                <small>
-                  {currentStage.name} · {ready ? 'ready' : 'gated'}
-                </small>
-              </button>
+                <button
+                  aria-pressed={mission.id === activeMissionId}
+                  className="mission-row"
+                  type="button"
+                  onClick={() => dispatch({ type: 'select-mission', missionId: mission.id })}
+                >
+                  <span>{mission.title}</span>
+                  <small>
+                    {currentStage.name} · {missionStatusLabels[mission.status]} · {ready ? 'ready' : 'gated'}
+                  </small>
+                </button>
+                <select
+                  aria-label={`${mission.title} mission status`}
+                  value={mission.status}
+                  onChange={(event) =>
+                    dispatch({
+                      type: 'update-mission-status',
+                      missionId: mission.id,
+                      status: event.target.value as typeof mission.status,
+                    })
+                  }
+                >
+                  {missionStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {missionStatusLabels[status]}
+                    </option>
+                  ))}
+                </select>
+              </article>
             )
           })}
+          {visibleMissions.length === 0 ? <p className="empty-state">No missions match this status.</p> : null}
         </div>
       </div>
 

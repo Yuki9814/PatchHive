@@ -6,6 +6,16 @@ export type EvidenceKind = 'file' | 'log' | 'decision' | 'link' | 'diff'
 
 export type RiskLevel = 'low' | 'medium' | 'high'
 
+export type MissionStatus = 'active' | 'ready' | 'archived'
+
+export type MissionStatusFilter = 'all' | MissionStatus
+
+export type HandoffFieldKey = 'summary' | 'patchPlan' | 'testPlan' | 'risks' | 'maintainerComment'
+
+export type HandoffEvidenceTarget = Exclude<HandoffFieldKey, 'maintainerComment'>
+
+export type HandoffFieldSources = Partial<Record<HandoffFieldKey, string[]>>
+
 export type MissionSource = {
   kind: MissionSourceKind
   url?: string
@@ -42,6 +52,7 @@ export type EvidenceItem = {
   stageId?: string
   agentId?: string
   createdAt: string
+  updatedAt: string
 }
 
 export type ApprovalGate = {
@@ -59,6 +70,7 @@ export type HandoffDraft = {
   testPlan: string
   risks: string
   maintainerComment: string
+  fieldSources: HandoffFieldSources
   ready: boolean
 }
 
@@ -73,6 +85,7 @@ export type MissionStage = {
 export type Mission = {
   id: string
   templateId: string
+  status: MissionStatus
   title: string
   source: MissionSource
   repo: string
@@ -101,6 +114,7 @@ export type MissionTemplate = {
 export type WorkspaceSettings = {
   schemaVersion: number
   density: 'comfortable' | 'compact'
+  missionStatusFilter: MissionStatusFilter
   mobilePanel: 'missions' | 'work' | 'inspector'
   showGuidance: boolean
 }

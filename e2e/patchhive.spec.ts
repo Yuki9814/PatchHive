@@ -7,6 +7,12 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('creates a mission, links evidence, and unlocks handoff export', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 820 })
+  await page.getByRole('button', { name: 'Inspector' }).click()
+  await expect(page.getByLabel('Evidence, approvals, and handoff')).toBeVisible()
+  await page.getByRole('button', { name: 'Work' }).click()
+  await page.setViewportSize({ width: 1280, height: 900 })
+
   await page.getByRole('button', { name: 'New mission' }).click()
   await page.getByLabel('Source type').selectOption('diff-paste')
   await page.getByLabel('Source', { exact: true }).fill('diff --git a/src/parser.ts b/src/parser.ts')
@@ -36,9 +42,20 @@ test('creates a mission, links evidence, and unlocks handoff export', async ({ p
   await page
     .getByRole('article')
     .filter({ has: page.getByRole('heading', { name: 'Patch Agent' }) })
-    .getByRole('button', { name: 'Draft from evidence' })
+    .getByRole('button', { name: 'Draft Patch plan' })
     .click()
   await expect(inspector.getByRole('textbox', { name: /Patch plan/ })).toHaveValue(/Playwright regression proof/)
   await page.getByRole('button', { name: 'Approve', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Copy Markdown' })).toBeEnabled()
+})
+
+test('rejects invalid workspace JSON imports', async ({ page }) => {
+  await page.getByRole('button', { name: 'Import JSON' }).click()
+  await page.getByLabel('Import workspace JSON').setInputFiles({
+    name: 'invalid-workspace.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{"missions":"nope"}'),
+  })
+
+  await expect(page.getByText(/not a PatchHive workspace/i)).toBeVisible()
 })

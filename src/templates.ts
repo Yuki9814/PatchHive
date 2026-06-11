@@ -253,6 +253,7 @@ function makeInitialEvidence(input: ComposerInput, source: MissionSource, stageI
       url: source.kind === 'github-url' ? source.url : undefined,
       stageId,
       createdAt,
+      updatedAt: createdAt,
     },
   ]
 
@@ -264,6 +265,7 @@ function makeInitialEvidence(input: ComposerInput, source: MissionSource, stageI
       detail: `${source.parsedRepo}${source.parsedNumber ? ` #${source.parsedNumber}` : ''}`,
       stageId,
       createdAt,
+      updatedAt: createdAt,
     })
   }
 
@@ -289,6 +291,7 @@ export function createMissionFromInput(input: ComposerInput): Mission {
   return {
     id: createId('mission'),
     templateId: template.id,
+    status: 'active',
     title: input.title.trim() || template.name,
     source,
     repo: parsed.parsedRepo ?? 'Repository not parsed',
@@ -308,6 +311,7 @@ export function createMissionFromInput(input: ComposerInput): Mission {
       testPlan: 'Define regression coverage before a maintainer-facing handoff.',
       risks: 'Risk review pending.',
       maintainerComment: 'Thanks for the context. I reviewed the scope and will follow up with a minimal plan once evidence and tests are attached.',
+      fieldSources: {},
       ready: false,
     },
     createdAt,

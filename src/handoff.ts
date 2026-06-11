@@ -1,3 +1,4 @@
+import { getHandoffEvidenceCoverage, getHandoffFieldSourceIds, handoffEvidenceTargets } from './handoffCoverage'
 import type { ApprovalGate, EvidenceItem, Mission, MissionStage } from './types'
 
 function listItems(items: string[]) {
@@ -20,6 +21,16 @@ function approvalLine(item: ApprovalGate) {
 
 function stageLine(stage: MissionStage) {
   return `- ${stage.name}: ${stage.summary}`
+}
+
+function sourceCoverageLine(mission: Mission, field: (typeof handoffEvidenceTargets)[number]) {
+  const evidenceById = new Map(mission.evidence.map((item) => [item.id, item]))
+  const sources = getHandoffFieldSourceIds(mission, field)
+    .map((id) => evidenceById.get(id))
+    .filter(Boolean)
+    .map((item) => `${item?.title} (${item?.kind})`)
+
+  return `- ${field}: ${sources.length > 0 ? sources.join(', ') : 'No evidence source mapped'}`
 }
 
 export function isHandoffReady(mission: Mission) {
@@ -75,6 +86,10 @@ export function getHandoffBlockers(mission: Mission) {
     }
   })
 
+  if (!getHandoffEvidenceCoverage(mission).hasAnyCoverage) {
+    blockers.push('At least one handoff field needs evidence source coverage')
+  }
+
   return blockers
 }
 
@@ -112,6 +127,10 @@ ${mission.stages.map(stageLine).join('\n')}
 ## Evidence
 
 ${mission.evidence.length > 0 ? mission.evidence.map(evidenceLine).join('\n') : '- No evidence attached yet'}
+
+## Handoff Evidence Sources
+
+${handoffEvidenceTargets.map((field) => sourceCoverageLine(mission, field)).join('\n')}
 
 ## Agent Outputs
 

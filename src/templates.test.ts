@@ -29,7 +29,10 @@ describe('templates', () => {
     })
 
     expect(mission.repo).toBe('owner/repo')
+    expect(mission.status).toBe('active')
     expect(mission.evidence).toHaveLength(2)
+    expect(mission.evidence[0].updatedAt).toBeTruthy()
+    expect(mission.outputs.fieldSources).toEqual({})
     expect(mission.approvals.map((approval) => approval.requiredBefore)).toContain('Handoff export')
   })
 

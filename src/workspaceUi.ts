@@ -1,5 +1,15 @@
 import { missionTemplates } from './templates'
-import type { AgentStatus, ComposerInput, EvidenceKind, Mission, MissionTemplate } from './types'
+import type {
+  AgentStatus,
+  ComposerInput,
+  EvidenceKind,
+  HandoffEvidenceTarget,
+  HandoffFieldKey,
+  Mission,
+  MissionStatus,
+  MissionStatusFilter,
+  MissionTemplate,
+} from './types'
 
 export type EvidenceForm = {
   kind: EvidenceKind
@@ -16,6 +26,24 @@ export type EvidenceFilter = 'all' | 'unlinked' | EvidenceKind
 
 export const agentStatuses: AgentStatus[] = ['idle', 'scanning', 'drafting', 'waiting', 'ready', 'blocked']
 export const evidenceKinds: EvidenceKind[] = ['file', 'log', 'decision', 'link', 'diff']
+export const missionStatuses: MissionStatus[] = ['active', 'ready', 'archived']
+export const missionStatusFilters: MissionStatusFilter[] = ['all', ...missionStatuses]
+export const handoffEvidenceTargets: HandoffEvidenceTarget[] = ['summary', 'patchPlan', 'testPlan', 'risks']
+
+export const missionStatusLabels: Record<MissionStatusFilter, string> = {
+  all: 'All missions',
+  active: 'Active',
+  ready: 'Ready',
+  archived: 'Archived',
+}
+
+export const handoffFieldLabels: Record<HandoffFieldKey, string> = {
+  summary: 'Summary',
+  patchPlan: 'Patch plan',
+  testPlan: 'Test plan',
+  risks: 'Risks',
+  maintainerComment: 'Maintainer comment',
+}
 
 export const sourceHints: Record<ComposerInput['sourceKind'], string> = {
   'github-url': 'Paste a GitHub issue or PR URL. PatchHive parses owner/repo and issue number locally.',
@@ -61,6 +89,10 @@ export const emptyEvidenceForm = (): EvidenceForm => ({
 
 export function getActiveMission(missions: Mission[], activeMissionId: string) {
   return missions.find((mission) => mission.id === activeMissionId) ?? missions[0]
+}
+
+export function getFilteredMissions(missions: Mission[], filter: MissionStatusFilter) {
+  return filter === 'all' ? missions : missions.filter((mission) => mission.status === filter)
 }
 
 export function getMissionLaneName(mission: Mission, laneId?: string) {

@@ -1,8 +1,10 @@
 import { getStageGateBlocker } from '../handoff'
 import type { Mission, MissionStage } from '../types'
 import type { WorkspaceAction } from '../workspaceReducer'
-import { agentStatuses, statusDescriptions } from '../workspaceUi'
+import { agentStatuses, handoffEvidenceTargets, handoffFieldLabels, statusDescriptions } from '../workspaceUi'
 import type { Dispatch } from 'react'
+
+type InspectorPanel = 'evidence' | 'approvals' | 'handoff'
 
 type MissionWorkspaceProps = {
   mission: Mission
@@ -20,6 +22,7 @@ type MissionWorkspaceProps = {
   findingDrafts: Record<string, string>
   onFindingDraftChange: (key: string, value: string) => void
   onAddFinding: (stageId: string, laneId: string) => void
+  onOpenInspectorPanel: (panel: InspectorPanel) => void
   onStatusMessage: (message: string) => void
   dispatch: Dispatch<WorkspaceAction>
 }
@@ -33,6 +36,7 @@ export function MissionWorkspace({
   findingDrafts,
   onFindingDraftChange,
   onAddFinding,
+  onOpenInspectorPanel,
   onStatusMessage,
   dispatch,
 }: MissionWorkspaceProps) {
@@ -93,18 +97,18 @@ export function MissionWorkspace({
             <span>Stage</span>
             <strong>{missionHealth.stageName}</strong>
           </article>
-          <article>
+          <button type="button" onClick={() => onOpenInspectorPanel('evidence')}>
             <span>Evidence</span>
             <strong>{missionHealth.evidenceGap}</strong>
-          </article>
-          <article>
+          </button>
+          <button type="button" onClick={() => onOpenInspectorPanel('approvals')}>
             <span>Approvals</span>
             <strong>{missionHealth.approvalGap}</strong>
-          </article>
-          <article>
+          </button>
+          <button type="button" onClick={() => onOpenInspectorPanel('handoff')}>
             <span>Handoff</span>
             <strong>{missionHealth.handoffGap}</strong>
-          </article>
+          </button>
         </div>
         <p>
           <span>Next step</span>
@@ -246,22 +250,29 @@ export function MissionWorkspace({
                   <small>No evidence linked yet</small>
                 )}
               </div>
-              <button
-                className="subtle-button"
-                disabled={attachedEvidence.length === 0}
-                type="button"
-                onClick={() => {
-                  dispatch({
-                    type: 'draft-handoff-from-evidence',
-                    missionId: mission.id,
-                    stageId: activeStage.id,
-                    laneId: lane.id,
-                  })
-                  onStatusMessage(`${lane.name} evidence added to the handoff draft.`)
-                }}
-              >
-                Draft from evidence
-              </button>
+              <div className="draft-targets" aria-label={`${lane.name} handoff targets`}>
+                {handoffEvidenceTargets.map((targetField) => (
+                  <button
+                    className="subtle-button"
+                    disabled={attachedEvidence.length === 0}
+                    key={targetField}
+                    type="button"
+                    onClick={() => {
+                      dispatch({
+                        type: 'draft-handoff-from-evidence',
+                        missionId: mission.id,
+                        stageId: activeStage.id,
+                        laneId: lane.id,
+                        targetField,
+                      })
+                      onOpenInspectorPanel('handoff')
+                      onStatusMessage(`${lane.name} evidence added to ${handoffFieldLabels[targetField]}.`)
+                    }}
+                  >
+                    Draft {handoffFieldLabels[targetField]}
+                  </button>
+                ))}
+              </div>
             </article>
           )
         })}
