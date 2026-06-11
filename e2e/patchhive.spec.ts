@@ -10,7 +10,7 @@ test('creates a mission, links evidence, and unlocks handoff export', async ({ p
   await page.getByRole('button', { name: 'New mission' }).click()
   await page.getByLabel('Source type').selectOption('diff-paste')
   await page.getByLabel('Source', { exact: true }).fill('diff --git a/src/parser.ts b/src/parser.ts')
-  await page.getByLabel('Title').fill('Playwright rescue mission')
+  await page.getByLabel('Title', { exact: true }).fill('Playwright rescue mission')
   await page.getByRole('button', { name: 'Start mission' }).click()
 
   await expect(page.getByRole('heading', { name: 'Playwright rescue mission' })).toBeVisible()
@@ -32,6 +32,13 @@ test('creates a mission, links evidence, and unlocks handoff export', async ({ p
   await inspector.getByRole('button', { name: 'Attach evidence' }).click()
 
   await expect(inspector.getByText('All evidence is linked.')).toBeVisible()
+  await expect(inspector.getByText('Patch Plan · Patch Agent')).toBeVisible()
+  await page
+    .getByRole('article')
+    .filter({ has: page.getByRole('heading', { name: 'Patch Agent' }) })
+    .getByRole('button', { name: 'Draft from evidence' })
+    .click()
+  await expect(inspector.getByRole('textbox', { name: /Patch plan/ })).toHaveValue(/Playwright regression proof/)
   await page.getByRole('button', { name: 'Approve', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Copy Markdown' })).toBeEnabled()
 })

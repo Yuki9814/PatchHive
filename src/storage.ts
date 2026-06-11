@@ -2,7 +2,7 @@ import { createSeedMission, missionTemplates } from './templates'
 import type { WorkspaceState } from './types'
 
 const STORAGE_KEY = 'patchhive.workspace.v1'
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 export function createDefaultWorkspace(): WorkspaceState {
   const seedMission = createSeedMission()
@@ -28,6 +28,16 @@ function isWorkspace(value: unknown): value is WorkspaceState {
   const candidate = value as WorkspaceState
   return (
     Array.isArray(candidate.missions) &&
+    candidate.missions.every(
+      (mission) =>
+        mission &&
+        typeof mission === 'object' &&
+        typeof mission.id === 'string' &&
+        typeof mission.title === 'string' &&
+        Array.isArray(mission.stages) &&
+        Array.isArray(mission.evidence) &&
+        Array.isArray(mission.approvals),
+    ) &&
     typeof candidate.activeMissionId === 'string' &&
     typeof candidate.settings?.schemaVersion === 'number'
   )
@@ -38,6 +48,7 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
     ? candidate.activeMissionId
     : candidate.missions[0]?.id
   const defaultWorkspace = createDefaultWorkspace()
+  const legacyEvidenceStageMigration = candidate.settings.schemaVersion < 4
 
   if (!activeMissionId) {
     return defaultWorkspace
@@ -51,7 +62,8 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
       ...mission,
       evidence: (mission.evidence ?? []).map((item) => ({
         ...item,
-        stageId: item.stageId ?? mission.activeStageId,
+        stageId: item.stageId || (legacyEvidenceStageMigration ? mission.activeStageId : undefined),
+        agentId: item.agentId || undefined,
       })),
       outputs: {
         summary: mission.outputs?.summary ?? mission.goal ?? '',

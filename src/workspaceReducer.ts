@@ -1,3 +1,4 @@
+import { getNextStageGateBlocker } from './handoff'
 import { createDefaultWorkspace } from './storage'
 import { createMissionFromInput } from './templates'
 import type {
@@ -10,7 +11,7 @@ import type {
   WorkspaceState,
 } from './types'
 
-type WorkspaceAction =
+export type WorkspaceAction =
   | { type: 'create-mission'; input: ComposerInput }
   | { type: 'select-mission'; missionId: string }
   | { type: 'set-stage'; missionId: string; stageId: string }
@@ -47,18 +48,6 @@ function mutateMission(
     ...state,
     missions: state.missions.map((mission) => (mission.id === missionId ? updater(mission) : mission)),
   }
-}
-
-function isStageLocked(state: WorkspaceState, missionId: string, nextStageName: string) {
-  const mission = state.missions.find((item) => item.id === missionId)
-
-  if (!mission) {
-    return false
-  }
-
-  return mission.approvals.some(
-    (approval) => !approval.approved && approval.requiredBefore === nextStageName,
-  )
 }
 
 function canEnterStage(mission: WorkspaceState['missions'][number], targetStageId: string) {
@@ -108,7 +97,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
         const currentIndex = mission.stages.findIndex((stage) => stage.id === mission.activeStageId)
         const nextStage = mission.stages[currentIndex + 1]
 
-        if (!nextStage || isStageLocked(state, mission.id, nextStage.name)) {
+        if (!nextStage || getNextStageGateBlocker(mission)) {
           return mission
         }
 
@@ -263,12 +252,21 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
           .map((item) => `[${item.kind}] ${item.title}: ${item.detail}`)
           .join('\n')
         const laneDraft = `${stage.name} / ${lane.name}\n${evidenceSummary}`
+        const evidenceKinds = new Set(evidence.map((item) => item.kind))
+        const targetField: keyof HandoffDraft =
+          evidenceKinds.has('diff') || lane.id === 'patch-agent'
+            ? 'patchPlan'
+            : evidenceKinds.has('log') || lane.id === 'test-agent'
+              ? 'testPlan'
+              : evidenceKinds.has('decision') || lane.id === 'review-agent'
+                ? 'risks'
+                : 'summary'
 
         return touch({
           ...mission,
           outputs: {
             ...mission.outputs,
-            summary: [mission.outputs.summary, laneDraft].filter(Boolean).join('\n\n'),
+            [targetField]: [mission.outputs[targetField], laneDraft].filter(Boolean).join('\n\n'),
           },
         })
       })

@@ -20,7 +20,7 @@ describe('storage', () => {
     expect(loadWorkspace().missions[0].title).toBe('pypdf XObject guard rescue')
   })
 
-  it('migrates saved v1 workspaces to schema v3 without dropping missions', () => {
+  it('migrates saved v1 workspaces to schema v4 without dropping missions', () => {
     const workspace = createDefaultWorkspace()
     const savedMission = {
       ...workspace.missions[0],
@@ -47,14 +47,14 @@ describe('storage', () => {
 
     const migrated = loadWorkspace()
 
-    expect(migrated.settings.schemaVersion).toBe(3)
+    expect(migrated.settings.schemaVersion).toBe(4)
     expect(migrated.settings.mobilePanel).toBe('work')
     expect(migrated.settings.showGuidance).toBe(true)
     expect(migrated.missions[0].title).toBe('Saved user mission')
     expect(migrated.missions[0].evidence[0].stageId).toBe(migrated.missions[0].activeStageId)
   })
 
-  it('repairs an invalid active mission id and persists schema v3', () => {
+  it('repairs an invalid active mission id and persists schema v4', () => {
     const workspace = createDefaultWorkspace()
     window.localStorage.setItem(
       storageKey,
@@ -72,7 +72,7 @@ describe('storage', () => {
     saveWorkspace(repaired)
 
     expect(repaired.activeMissionId).toBe(repaired.missions[0].id)
-    expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '{}').settings.schemaVersion).toBe(3)
+    expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '{}').settings.schemaVersion).toBe(4)
   })
 
   it('serializes and parses workspace JSON imports through the current migration path', () => {
@@ -86,8 +86,20 @@ describe('storage', () => {
     })
     const imported = parseWorkspaceImport(exported)
 
-    expect(imported.settings.schemaVersion).toBe(3)
+    expect(imported.settings.schemaVersion).toBe(4)
     expect(imported.missions[0].title).toBe(workspace.missions[0].title)
+  })
+
+  it('rejects partial workspace imports before replacing current data', () => {
+    expect(() =>
+      parseWorkspaceImport(
+        JSON.stringify({
+          missions: [{ id: 'mission-1', title: 'Incomplete mission' }],
+          activeMissionId: 'mission-1',
+          settings: { schemaVersion: 4 },
+        }),
+      ),
+    ).toThrow(/not a PatchHive workspace/i)
   })
 
   it('rejects JSON imports that are not PatchHive workspaces', () => {

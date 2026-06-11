@@ -11,6 +11,10 @@ describe('templates', () => {
       parsedRepo: 'owner/repo',
       parsedNumber: '7',
     })
+    expect(parseGithubSource('github.com/owner.name/repo-name/pulls/91?plain=1#discussion')).toEqual({
+      parsedRepo: 'owner.name/repo-name',
+      parsedNumber: '91',
+    })
   })
 
   it('creates a mission with parsed repo, source evidence, and export gates', () => {
@@ -27,5 +31,23 @@ describe('templates', () => {
     expect(mission.repo).toBe('owner/repo')
     expect(mission.evidence).toHaveLength(2)
     expect(mission.approvals.map((approval) => approval.requiredBefore)).toContain('Handoff export')
+  })
+
+  it('labels non-GitHub source evidence by captured source type', () => {
+    const mission = createMissionFromInput({
+      templateId: 'issue-intake',
+      title: 'Log intake',
+      sourceKind: 'log-paste',
+      sourceText: 'npm test failed with parser timeout',
+      goal: 'Capture repro notes.',
+      branch: 'main',
+      constraints: 'Keep notes traceable',
+    })
+
+    expect(mission.evidence[0]).toMatchObject({
+      kind: 'log',
+      title: 'Source Pasted log',
+    })
+    expect(mission.evidence[0].detail).toContain('Pasted log captured')
   })
 })

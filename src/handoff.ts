@@ -26,10 +26,40 @@ export function isHandoffReady(mission: Mission) {
   return getHandoffBlockers(mission).length === 0
 }
 
-export function getHandoffBlockers(mission: Mission) {
-  const blockers = mission.approvals
+function approvalBlockerLine(approval: ApprovalGate) {
+  return `${approval.label} before ${approval.requiredBefore}`
+}
+
+function getPendingApprovalBlockers(mission: Mission) {
+  return mission.approvals
     .filter((approval) => !approval.approved)
-    .map((approval) => `${approval.label} before ${approval.requiredBefore}`)
+    .map(approvalBlockerLine)
+}
+
+export function getStageGateBlocker(mission: Mission, targetStageId: string) {
+  const targetIndex = mission.stages.findIndex((stage) => stage.id === targetStageId)
+
+  if (targetIndex <= 0) {
+    return ''
+  }
+
+  const requiredStageNames = new Set(mission.stages.slice(1, targetIndex + 1).map((stage) => stage.name))
+  const blocker = mission.approvals.find(
+    (approval) => requiredStageNames.has(approval.requiredBefore) && !approval.approved,
+  )
+
+  return blocker ? approvalBlockerLine(blocker) : ''
+}
+
+export function getNextStageGateBlocker(mission: Mission) {
+  const currentIndex = mission.stages.findIndex((stage) => stage.id === mission.activeStageId)
+  const nextStage = mission.stages[currentIndex + 1]
+
+  return nextStage ? getStageGateBlocker(mission, nextStage.id) : ''
+}
+
+export function getHandoffBlockers(mission: Mission) {
+  const blockers = getPendingApprovalBlockers(mission)
 
   const requiredDrafts: Array<[label: string, value: string]> = [
     ['Summary', mission.outputs.summary],

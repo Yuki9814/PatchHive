@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { buildHandoffMarkdown, getHandoffBlockers, isHandoffReady } from './handoff'
+import {
+  buildHandoffMarkdown,
+  getHandoffBlockers,
+  getNextStageGateBlocker,
+  getStageGateBlocker,
+  isHandoffReady,
+} from './handoff'
 import { createMissionFromInput } from './templates'
 
 function readyMission() {
@@ -41,6 +47,22 @@ describe('handoff', () => {
       'Risks is required',
     ])
     expect(isHandoffReady(mission)).toBe(false)
+  })
+
+  it('uses the same approval blocker text for stage and handoff gates', () => {
+    const mission = readyMission()
+    const patchPlanStage = mission.stages.find((stage) => stage.id === 'patch-plan')
+    const gatedMission = {
+      ...mission,
+      approvals: mission.approvals.map((approval) =>
+        approval.id === 'patch-scope' ? { ...approval, approved: false, approvedAt: undefined } : approval,
+      ),
+    }
+
+    expect(getNextStageGateBlocker(gatedMission)).toBe('Patch scope approved before Patch Plan')
+    expect(getStageGateBlocker(gatedMission, patchPlanStage?.id ?? '')).toBe(
+      getHandoffBlockers(gatedMission)[0],
+    )
   })
 
   it('exports edited summary, risks, evidence, and approvals', () => {

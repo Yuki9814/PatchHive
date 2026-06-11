@@ -33,7 +33,7 @@ describe('workspaceReducer', () => {
     expect(advanced.missions[0].activeStageId).toBe('patch-plan')
   })
 
-  it('clamps lane confidence and drafts handoff summaries from linked evidence', () => {
+  it('clamps lane confidence and drafts handoff fields from linked evidence kind', () => {
     const state = createDefaultWorkspace()
     const mission = state.missions[0]
     const stage = mission.stages[0]
@@ -64,6 +64,32 @@ describe('workspaceReducer', () => {
     })
 
     expect(withConfidence.missions[0].stages[0].lanes[0].confidence).toBe(100)
-    expect(drafted.missions[0].outputs.summary).toContain('Scope locked')
+    expect(drafted.missions[0].outputs.risks).toContain('Scope locked')
+  })
+
+  it('routes patch evidence into the patch plan draft', () => {
+    const state = createDefaultWorkspace()
+    const mission = state.missions[0]
+    const stage = mission.stages[1]
+    const lane = stage.lanes.find((item) => item.id === 'patch-agent') ?? stage.lanes[0]
+    const withEvidence = workspaceReducer(state, {
+      type: 'add-evidence',
+      missionId: mission.id,
+      evidence: {
+        kind: 'diff',
+        title: 'Guard diff',
+        detail: 'Adds a narrow guard around parser access.',
+        stageId: stage.id,
+        agentId: lane.id,
+      },
+    })
+    const drafted = workspaceReducer(withEvidence, {
+      type: 'draft-handoff-from-evidence',
+      missionId: mission.id,
+      stageId: stage.id,
+      laneId: lane.id,
+    })
+
+    expect(drafted.missions[0].outputs.patchPlan).toContain('Guard diff')
   })
 })

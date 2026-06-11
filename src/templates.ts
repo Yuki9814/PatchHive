@@ -181,7 +181,9 @@ export const missionTemplates: MissionTemplate[] = [
 ]
 
 export function parseGithubSource(value: string): Pick<MissionSource, 'parsedRepo' | 'parsedNumber'> {
-  const match = value.match(/github\.com\/([^/\s]+\/[^/\s]+)\/(?:pull|issues)\/(\d+)/i)
+  const match = value.match(
+    /(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/(?:pull|pulls|issues)\/(\d+)(?:[/?#][^\s]*)?/i,
+  )
 
   if (!match) {
     return {}
@@ -225,16 +227,29 @@ function makeStages(template: MissionTemplate): MissionStage[] {
 
 function makeInitialEvidence(input: ComposerInput, source: MissionSource, stageId: string): EvidenceItem[] {
   const createdAt = now()
+  const sourceKindLabels: Record<ComposerInput['sourceKind'], string> = {
+    'github-url': 'GitHub thread',
+    'diff-paste': 'Pasted diff',
+    'log-paste': 'Pasted log',
+    manual: 'Manual brief',
+  }
+  const sourceKindEvidence: Record<ComposerInput['sourceKind'], EvidenceItem['kind']> = {
+    'github-url': 'link',
+    'diff-paste': 'diff',
+    'log-paste': 'log',
+    manual: 'decision',
+  }
+  const trimmedSource = input.sourceText.trim()
   const evidence: EvidenceItem[] = [
     {
       id: createId('evidence'),
-      kind: source.kind === 'github-url' ? 'link' : source.kind === 'diff-paste' ? 'diff' : 'decision',
-      title: source.kind === 'github-url' ? 'Source GitHub thread' : 'Mission source brief',
+      kind: sourceKindEvidence[source.kind],
+      title: `Source ${sourceKindLabels[source.kind]}`,
       detail:
         source.kind === 'github-url'
           ? source.url ?? 'GitHub source URL captured.'
-          : input.sourceText.slice(0, 220) || 'Manual mission source captured.',
-      sourceText: input.sourceText,
+          : `${sourceKindLabels[source.kind]} captured: ${trimmedSource.slice(0, 220) || 'No source text supplied.'}`,
+      sourceText: trimmedSource,
       url: source.kind === 'github-url' ? source.url : undefined,
       stageId,
       createdAt,

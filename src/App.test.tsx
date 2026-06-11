@@ -25,7 +25,7 @@ describe('App workflow', () => {
 
     const patchPlanTab = screen.getAllByRole('tab')[1]
     await user.click(patchPlanTab)
-    expect(screen.getAllByText(/patch scope approved is required before patch plan/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/patch scope approved before patch plan/i).length).toBeGreaterThan(0)
 
     await user.click(screen.getAllByRole('button', { name: /^approve$/i })[0])
     await user.click(patchPlanTab)
@@ -40,6 +40,10 @@ describe('App workflow', () => {
 
     expect(screen.getByText(/all evidence is linked/i)).toBeInTheDocument()
     expect(screen.getByText('Regression proof')).toBeInTheDocument()
+    expect(screen.getByText(/Patch Plan · Patch Agent/i)).toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('tab')[0])
+    expect(screen.getByText(/Patch Plan · Patch Agent/i)).toBeInTheDocument()
 
     await user.click(screen.getAllByRole('button', { name: /^approve$/i })[0])
 
