@@ -125,4 +125,24 @@ describe('storage', () => {
   it('rejects JSON imports that are not PatchHive workspaces', () => {
     expect(() => parseWorkspaceImport('{"missions":"nope"}')).toThrow(/not a PatchHive workspace/i)
   })
+
+  it('rejects malformed nested mission data before it reaches the reducer', () => {
+    const workspace = createDefaultWorkspace()
+    const malformed = {
+      ...workspace,
+      missions: [
+        {
+          ...workspace.missions[0],
+          stages: [
+            {
+              ...workspace.missions[0].stages[0],
+              lanes: [{ ...workspace.missions[0].stages[0].lanes[0], confidence: 'high' }],
+            },
+          ],
+        },
+      ],
+    }
+
+    expect(() => parseWorkspaceImport(JSON.stringify(malformed))).toThrow(/not a PatchHive workspace/i)
+  })
 })
