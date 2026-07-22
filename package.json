@@ -1,13 +1,14 @@
 {
   "name": "patchhive",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "check": "npm run lint && npm test && npm run build",
     "test:e2e": "playwright test",
     "preview": "vite preview"
   },

@@ -1,5 +1,7 @@
 # PatchHive
 
+[![CI](https://github.com/Yuki9814/PatchHive/actions/workflows/ci.yml/badge.svg)](https://github.com/Yuki9814/PatchHive/actions/workflows/ci.yml)
+
 PatchHive is a browser-only local workbench for open-source maintainers. It turns a GitHub issue or PR, pasted diff, log, or manual brief into a structured mission with specialized agent lanes, evidence, approval gates, and a maintainer handoff draft.
 
 The v1 product is intentionally local-first:
@@ -42,6 +44,13 @@ Lint the project:
 npm run lint
 ```
 
+Run the full local verification stack:
+
+```bash
+npm run check
+npm run test:e2e
+```
+
 ## Typical Workflow
 
 1. Click `New mission`.
@@ -70,3 +79,18 @@ PatchHive is designed around five principles:
 - human approval for meaningful risk
 - maintainers need concise handoffs, not noisy transcripts
 - workflows should feel useful on desktop and remain usable on mobile
+
+## Trust and maintenance
+
+- Workspace imports are size-limited and structurally validated before they replace local data.
+- Schema migrations preserve the browser key `patchhive.workspace.v1`.
+- CI runs lint, unit tests, production builds, and the Chromium workflow test.
+- Security reports and contribution expectations are documented in
+  [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+
+PatchHive is an evidence workbench, not an autonomous patching service. It does
+not authenticate to GitHub, execute models, or post changes on a maintainer's behalf.
+
+## License
+
+MIT

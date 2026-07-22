@@ -2,7 +2,7 @@ import { createSeedMission, missionTemplates } from './templates'
 import type { HandoffFieldSources, MissionStatus, MissionStatusFilter, WorkspaceState } from './types'
 
 const STORAGE_KEY = 'patchhive.workspace.v1'
-const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 5
 export const MAX_WORKSPACE_IMPORT_BYTES = 1_000_000
 
 export type WorkspaceImportPreview = {
@@ -39,6 +39,115 @@ function isMissionStatusFilter(value: unknown): value is MissionStatusFilter {
   return value === 'all' || isMissionStatus(value)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function isLane(value: unknown) {
+  if (!isRecord(value)) return false
+
+  return (
+    typeof value.id === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.role === 'string' &&
+    ['idle', 'scanning', 'drafting', 'waiting', 'ready', 'blocked'].includes(String(value.status)) &&
+    typeof value.confidence === 'number' &&
+    Array.isArray(value.findings) &&
+    value.findings.every(
+      (finding) =>
+        isRecord(finding) &&
+        typeof finding.id === 'string' &&
+        typeof finding.text === 'string' &&
+        typeof finding.createdAt === 'string',
+    ) &&
+    isStringArray(value.assignedEvidenceIds) &&
+    typeof value.outputDraft === 'string'
+  )
+}
+
+function isStage(value: unknown) {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.summary === 'string' &&
+    typeof value.nextAction === 'string' &&
+    Array.isArray(value.lanes) &&
+    value.lanes.every(isLane)
+  )
+}
+
+function isEvidence(value: unknown) {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    ['file', 'log', 'decision', 'link', 'diff'].includes(String(value.kind)) &&
+    typeof value.title === 'string' &&
+    typeof value.detail === 'string' &&
+    typeof value.createdAt === 'string' &&
+    (value.updatedAt === undefined || typeof value.updatedAt === 'string') &&
+    (value.stageId === undefined || typeof value.stageId === 'string') &&
+    (value.agentId === undefined || typeof value.agentId === 'string')
+  )
+}
+
+function isApproval(value: unknown) {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.label === 'string' &&
+    ['low', 'medium', 'high'].includes(String(value.riskLevel)) &&
+    typeof value.requiredBefore === 'string' &&
+    typeof value.approved === 'boolean' &&
+    (value.approvedAt === undefined || typeof value.approvedAt === 'string')
+  )
+}
+
+function isOutputs(value: unknown) {
+  return (
+    isRecord(value) &&
+    typeof value.summary === 'string' &&
+    typeof value.patchPlan === 'string' &&
+    typeof value.testPlan === 'string' &&
+    typeof value.risks === 'string' &&
+    typeof value.maintainerComment === 'string' &&
+    typeof value.ready === 'boolean' &&
+    (value.fieldSources === undefined ||
+      (isRecord(value.fieldSources) && Object.values(value.fieldSources).every(isStringArray)))
+  )
+}
+
+function isMission(value: unknown) {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.templateId === 'string' &&
+    (value.status === undefined || isMissionStatus(value.status)) &&
+    typeof value.title === 'string' &&
+    isRecord(value.source) &&
+    ['github-url', 'manual', 'diff-paste', 'log-paste'].includes(String(value.source.kind)) &&
+    typeof value.repo === 'string' &&
+    typeof value.branch === 'string' &&
+    typeof value.goal === 'string' &&
+    isStringArray(value.constraints) &&
+    Array.isArray(value.stages) &&
+    value.stages.length > 0 &&
+    value.stages.every(isStage) &&
+    typeof value.activeStageId === 'string' &&
+    Array.isArray(value.evidence) &&
+    value.evidence.every(isEvidence) &&
+    Array.isArray(value.approvals) &&
+    value.approvals.every(isApproval) &&
+    isOutputs(value.outputs) &&
+    typeof value.createdAt === 'string' &&
+    typeof value.updatedAt === 'string'
+  )
+}
+
 function isWorkspace(value: unknown): value is WorkspaceState {
   if (!value || typeof value !== 'object') {
     return false
@@ -47,16 +156,7 @@ function isWorkspace(value: unknown): value is WorkspaceState {
   const candidate = value as WorkspaceState
   return (
     Array.isArray(candidate.missions) &&
-    candidate.missions.every(
-      (mission) =>
-        mission &&
-        typeof mission === 'object' &&
-        typeof mission.id === 'string' &&
-        typeof mission.title === 'string' &&
-        Array.isArray(mission.stages) &&
-        Array.isArray(mission.evidence) &&
-        Array.isArray(mission.approvals),
-    ) &&
+    candidate.missions.every(isMission) &&
     typeof candidate.activeMissionId === 'string' &&
     typeof candidate.settings?.schemaVersion === 'number'
   )
