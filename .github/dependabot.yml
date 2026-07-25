@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # typescript-eslint 8.65 currently declares support only below TypeScript 6.1.
+      - dependency-name: typescript
+        versions:
+          - ">=7.0.0"
     groups:
       development-dependencies:
         dependency-type: development
