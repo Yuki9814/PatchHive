@@ -1,0 +1,15 @@
+# Trust-boundary, release, and deployment surfaces require maintainer review.
+/.github/ @Yuki9814
+/src/agentHygieneImport.ts @Yuki9814
+/src/scanIdentity.ts @Yuki9814
+/src/storage.ts @Yuki9814
+/src/workspaceReducer.ts @Yuki9814
+/src/handoff.ts @Yuki9814
+/src/safeMarkdown.ts @Yuki9814
+/src/safeUrl.ts @Yuki9814
+/scripts/ @Yuki9814
+/index.html @Yuki9814
+/package.json @Yuki9814
+/package-lock.json @Yuki9814
+/SECURITY.md @Yuki9814
+/MAINTAINERS.md @Yuki9814

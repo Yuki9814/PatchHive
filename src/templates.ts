@@ -8,6 +8,7 @@ import type {
   MissionStage,
   MissionTemplate,
 } from './types'
+import { parseGitHubIssueOrPullUrl } from './safeUrl'
 
 const now = () => new Date().toISOString()
 
@@ -181,17 +182,15 @@ export const missionTemplates: MissionTemplate[] = [
 ]
 
 export function parseGithubSource(value: string): Pick<MissionSource, 'parsedRepo' | 'parsedNumber'> {
-  const match = value.match(
-    /(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/(?:pull|pulls|issues)\/(\d+)(?:[/?#][^\s]*)?/i,
-  )
+  const parsed = parseGitHubIssueOrPullUrl(value)
 
-  if (!match) {
+  if (!parsed) {
     return {}
   }
 
   return {
-    parsedRepo: match[1],
-    parsedNumber: match[2],
+    parsedRepo: parsed.repo,
+    parsedNumber: parsed.number,
   }
 }
 
@@ -275,9 +274,11 @@ function makeInitialEvidence(input: ComposerInput, source: MissionSource, stageI
 export function createMissionFromInput(input: ComposerInput): Mission {
   const template = missionTemplates.find((item) => item.id === input.templateId) ?? missionTemplates[0]
   const parsed = parseGithubSource(input.sourceText)
+  const parsedGithubUrl =
+    input.sourceKind === 'github-url' ? parseGitHubIssueOrPullUrl(input.sourceText) : undefined
   const source: MissionSource = {
     kind: input.sourceKind,
-    url: input.sourceKind === 'github-url' ? input.sourceText.trim() : undefined,
+    url: parsedGithubUrl?.normalized,
     rawText: input.sourceText.trim(),
     ...parsed,
   }

@@ -601,6 +601,47 @@ select:focus-visible {
   gap: 10px;
 }
 
+.scan-import-panel > small {
+  color: var(--color-subtle);
+  font-size: 0.74rem;
+}
+
+.scan-import-panel textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.scan-import-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scan-preview {
+  display: grid;
+  gap: 7px;
+  border: 1px solid rgba(37, 99, 235, 0.24);
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 10px;
+}
+
+.scan-preview strong {
+  color: #1e3a8a;
+  font-size: 0.84rem;
+}
+
+.scan-preview p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+.scan-preview .scan-preview__warning {
+  color: #92400e;
+  font-weight: 700;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

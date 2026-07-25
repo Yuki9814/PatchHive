@@ -1,9 +1,10 @@
-import type { HandoffDraft, Mission, MissionStage } from '../types'
+import type { EvidenceTriageStatus, HandoffDraft, Mission, MissionStage } from '../types'
 import type { EvidenceFilter, EvidenceForm } from '../workspaceUi'
 import type { WorkspaceAction } from '../workspaceReducer'
 import { ApprovalsPanel } from './ApprovalsPanel'
 import { EvidencePanel } from './EvidencePanel'
 import { HandoffPanel } from './HandoffPanel'
+import { ScanImportPanel } from './ScanImportPanel'
 import type { Dispatch, FormEvent } from 'react'
 
 type FieldStatusMap = Record<
@@ -76,8 +77,23 @@ export function Inspector({
       output,
     })
 
+  const setEvidenceTriage = (evidenceId: string, triageStatus: EvidenceTriageStatus) =>
+    dispatch({
+      type: 'update-evidence',
+      missionId: mission.id,
+      evidenceId,
+      evidence: { triageStatus },
+    })
+
   return (
     <aside className="inspector" aria-label="Evidence, approvals, and handoff">
+      <ScanImportPanel
+        dispatch={dispatch}
+        mission={mission}
+        onStatusMessage={onStatusMessage}
+        stageId={activeStage.id}
+      />
+
       <EvidencePanel
         activeStage={activeStage}
         editingEvidenceId={editingEvidenceId}
@@ -95,6 +111,7 @@ export function Inspector({
         onEvidenceStageFilterChange={onEvidenceStageFilterChange}
         onStartEvidenceEdit={onStartEvidenceEdit}
         onSubmitEvidence={onSubmitEvidence}
+        onSetEvidenceTriage={setEvidenceTriage}
         unlinkedEvidenceCount={unlinkedEvidenceCount}
       />
 

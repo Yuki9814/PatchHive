@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -70,5 +70,57 @@ describe('App workflow', () => {
     await user.selectOptions(screen.getByLabelText(/status filter/i), 'active')
 
     expect(screen.getByText(/no missions match this status/i)).toBeInTheDocument()
+  })
+
+  it('previews scanner JSON before importing plain-text evidence with provenance', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const scanJson = JSON.stringify({
+      schema_version: 1,
+      tool: { name: 'agent-hygiene', version: '0.3.0' },
+      summary: {
+        root: '/Users/private/repository',
+        complete: true,
+        score: 70,
+        status: 'needs-review',
+        discovery_issues: [],
+      },
+      findings: [
+        {
+          rule_id: 'AH003',
+          title: 'Hard-coded secret',
+          severity: 'critical',
+          path: 'AGENTS.md',
+          line: 4,
+          message: '<img src=x onerror=alert(1)> remains plain text.',
+          remediation: 'Move the value to a secret store.',
+          fingerprint: '33333333333333333333',
+        },
+      ],
+    })
+
+    fireEvent.change(screen.getByLabelText(/scan json or sarif/i), {
+      target: { value: scanJson },
+    })
+    await user.click(screen.getByRole('button', { name: /preview scan/i }))
+
+    expect(screen.getByLabelText(/agent-hygiene import preview/i)).toHaveTextContent(
+      'JSON · 1 findings · complete',
+    )
+    expect(screen.queryByText(/AH003 · Hard-coded secret/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /import into current stage/i }))
+
+    const importedCard = screen.getByText('AH003 · Hard-coded secret').closest('article')
+    expect(importedCard).not.toBeNull()
+    expect(within(importedCard as HTMLElement).getByText(/agent-hygiene JSON/i)).toBeInTheDocument()
+    expect(within(importedCard as HTMLElement).getByText(/<img src=x onerror/i)).toBeInTheDocument()
+    expect(document.querySelector('img[src="x"]')).toBeNull()
+    expect(screen.getByText(/1 high-severity imported finding/i)).toBeInTheDocument()
+
+    await user.click(
+      within(importedCard as HTMLElement).getByRole('button', { name: /accept risk/i }),
+    )
+    expect(screen.queryByText(/1 high-severity imported finding/i)).not.toBeInTheDocument()
   })
 })

@@ -1,8 +1,18 @@
 import { createSeedMission, missionTemplates } from './templates'
-import type { HandoffFieldSources, MissionStatus, MissionStatusFilter, WorkspaceState } from './types'
+import { normalizeExternalUrl } from './safeUrl'
+import { deriveScanScopeId } from './scanIdentity'
+import type {
+  EvidenceProvenance,
+  EvidenceTriageStatus,
+  HandoffFieldSources,
+  MissionStatus,
+  MissionStatusFilter,
+  ScanSeverity,
+  WorkspaceState,
+} from './types'
 
 const STORAGE_KEY = 'patchhive.workspace.v1'
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 export const MAX_WORKSPACE_IMPORT_BYTES = 1_000_000
 
 export type WorkspaceImportPreview = {
@@ -47,6 +57,104 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
+function hasUniqueIds(items: Array<{ id: string }>) {
+  return new Set(items.map((item) => item.id)).size === items.length
+}
+
+function isScanSeverity(value: unknown): value is ScanSeverity {
+  return ['critical', 'high', 'medium', 'low', 'info'].includes(String(value))
+}
+
+function isTriageStatus(value: unknown): value is EvidenceTriageStatus {
+  return ['open', 'accepted', 'resolved'].includes(String(value))
+}
+
+function isEvidenceProvenance(value: unknown): value is EvidenceProvenance {
+  return (
+    isRecord(value) &&
+    value.importer === 'agent-hygiene' &&
+    ['json', 'sarif'].includes(String(value.format)) &&
+    typeof value.sourceName === 'string' &&
+    value.toolName === 'agent-hygiene' &&
+    (value.producerStatus === undefined ||
+      value.producerStatus === 'declared' ||
+      value.producerStatus === 'unverified') &&
+    (value.producerVersion === undefined || typeof value.producerVersion === 'string') &&
+    typeof value.scanComplete === 'boolean' &&
+    typeof value.importedAt === 'string' &&
+    (value.scanRoot === undefined || typeof value.scanRoot === 'string') &&
+    (value.scopeId === undefined || typeof value.scopeId === 'string') &&
+    (value.ruleId === undefined || typeof value.ruleId === 'string') &&
+    (value.fingerprint === undefined || typeof value.fingerprint === 'string') &&
+    (value.findingKey === undefined || typeof value.findingKey === 'string')
+  )
+}
+
+function sanitizeEvidenceProvenance(provenance?: EvidenceProvenance) {
+  if (!provenance) {
+    return undefined
+  }
+
+  let decodedScanRoot = provenance.scanRoot
+
+  if (decodedScanRoot) {
+    try {
+      decodedScanRoot = decodeURIComponent(decodedScanRoot)
+    } catch {
+      // Keep malformed percent escapes literal.
+    }
+  }
+
+  const normalizedScanRoot = decodedScanRoot?.replaceAll('\\', '/')
+  const hasUnsafeScanRoot =
+    normalizedScanRoot !== undefined &&
+    (normalizedScanRoot.startsWith('/') ||
+      normalizedScanRoot === '~' ||
+      normalizedScanRoot.startsWith('~/') ||
+      /^[A-Za-z]:/.test(normalizedScanRoot) ||
+      normalizedScanRoot.split('/').includes('..'))
+  const scopeId =
+    provenance.scopeId ?? deriveScanScopeId(provenance.scanRoot, provenance.sourceName)
+
+  return {
+    ...provenance,
+    producerStatus: provenance.producerStatus ?? 'unverified',
+    scanRoot: hasUnsafeScanRoot ? undefined : provenance.scanRoot,
+    scopeId,
+  }
+}
+
+function sanitizeScannerFilePath(filePath?: string) {
+  if (!filePath) {
+    return undefined
+  }
+
+  let decodedPath = filePath
+
+  try {
+    decodedPath = decodeURIComponent(filePath)
+  } catch {
+    // Keep malformed percent escapes literal.
+  }
+
+  const pathWithoutLine = decodedPath.replace(/:\d+$/, '')
+  const normalized = pathWithoutLine.replaceAll('\\', '/')
+
+  if (
+    /[\r\n\t]/.test(filePath) ||
+    normalized.startsWith('/') ||
+    normalized === '~' ||
+    normalized.startsWith('~/') ||
+    /^[A-Za-z]:/.test(normalized) ||
+    normalized.split('/').includes('..') ||
+    /^[a-z][a-z0-9+.-]*:\/\//i.test(normalized)
+  ) {
+    return undefined
+  }
+
+  return filePath
+}
+
 function isLane(value: unknown) {
   if (!isRecord(value)) return false
 
@@ -88,10 +196,16 @@ function isEvidence(value: unknown) {
     ['file', 'log', 'decision', 'link', 'diff'].includes(String(value.kind)) &&
     typeof value.title === 'string' &&
     typeof value.detail === 'string' &&
+    (value.sourceText === undefined || typeof value.sourceText === 'string') &&
+    (value.url === undefined || typeof value.url === 'string') &&
+    (value.filePath === undefined || typeof value.filePath === 'string') &&
     typeof value.createdAt === 'string' &&
     (value.updatedAt === undefined || typeof value.updatedAt === 'string') &&
     (value.stageId === undefined || typeof value.stageId === 'string') &&
-    (value.agentId === undefined || typeof value.agentId === 'string')
+    (value.agentId === undefined || typeof value.agentId === 'string') &&
+    (value.severity === undefined || isScanSeverity(value.severity)) &&
+    (value.triageStatus === undefined || isTriageStatus(value.triageStatus)) &&
+    (value.provenance === undefined || isEvidenceProvenance(value.provenance))
   )
 }
 
@@ -154,11 +268,28 @@ function isWorkspace(value: unknown): value is WorkspaceState {
   }
 
   const candidate = value as WorkspaceState
-  return (
+  const structurallyValid =
     Array.isArray(candidate.missions) &&
     candidate.missions.every(isMission) &&
     typeof candidate.activeMissionId === 'string' &&
-    typeof candidate.settings?.schemaVersion === 'number'
+    Number.isInteger(candidate.settings?.schemaVersion) &&
+    candidate.settings.schemaVersion >= 1 &&
+    candidate.settings.schemaVersion <= SCHEMA_VERSION
+
+  if (!structurallyValid || !hasUniqueIds(candidate.missions)) {
+    return false
+  }
+
+  return candidate.missions.every(
+    (mission) =>
+      hasUniqueIds(mission.stages) &&
+      hasUniqueIds(mission.evidence) &&
+      hasUniqueIds(mission.approvals) &&
+      mission.stages.every(
+        (stage) =>
+          hasUniqueIds(stage.lanes) &&
+          stage.lanes.every((lane) => hasUniqueIds(lane.findings)),
+      ),
   )
 }
 
@@ -178,7 +309,56 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
     activeMissionId,
     templates: missionTemplates,
     missions: candidate.missions.map((mission) => {
-      const evidenceIds = new Set((mission.evidence ?? []).map((item) => item.id))
+      const stageIds = new Set(mission.stages.map((stage) => stage.id))
+      const activeStageId = stageIds.has(mission.activeStageId)
+        ? mission.activeStageId
+        : mission.stages[0].id
+      const laneIdsByStage = new Map(
+        mission.stages.map((stage) => [
+          stage.id,
+          new Set(stage.lanes.map((lane) => lane.id)),
+        ]),
+      )
+      const allLaneIds = new Set(
+        mission.stages.flatMap((stage) => stage.lanes.map((lane) => lane.id)),
+      )
+      const evidence = (mission.evidence ?? []).map((item) => {
+        const provenance = sanitizeEvidenceProvenance(item.provenance)
+        const candidateStageId =
+          item.stageId || (legacyEvidenceStageMigration ? activeStageId : undefined)
+        const stageId =
+          candidateStageId && stageIds.has(candidateStageId)
+            ? candidateStageId
+            : undefined
+        const validLaneIds = stageId
+          ? (laneIdsByStage.get(stageId) ?? new Set<string>())
+          : allLaneIds
+        const agentId =
+          item.agentId && validLaneIds.has(item.agentId)
+            ? item.agentId
+            : undefined
+
+        return {
+          ...item,
+          url: item.url ? normalizeExternalUrl(item.url) : undefined,
+          filePath: provenance
+            ? sanitizeScannerFilePath(item.filePath)
+            : item.filePath,
+          stageId,
+          agentId,
+          triageStatus:
+            provenance && !provenance.scanComplete
+              ? 'open' as const
+              : isTriageStatus(item.triageStatus)
+                ? item.triageStatus
+                : provenance
+                  ? 'open'
+                  : undefined,
+          provenance,
+          updatedAt: item.updatedAt ?? item.createdAt ?? new Date().toISOString(),
+        }
+      })
+      const evidenceIds = new Set(evidence.map((item) => item.id))
       const normalizeSources = (fieldSources?: HandoffFieldSources): HandoffFieldSources =>
         Object.fromEntries(
           Object.entries(fieldSources ?? {}).map(([field, ids]) => [
@@ -189,12 +369,17 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
 
       return {
         ...mission,
+        activeStageId,
         status: isMissionStatus(mission.status) ? mission.status : 'active',
-        evidence: (mission.evidence ?? []).map((item) => ({
-          ...item,
-          stageId: item.stageId || (legacyEvidenceStageMigration ? mission.activeStageId : undefined),
-          agentId: item.agentId || undefined,
-          updatedAt: item.updatedAt ?? item.createdAt ?? new Date().toISOString(),
+        evidence,
+        stages: mission.stages.map((stage) => ({
+          ...stage,
+          lanes: stage.lanes.map((lane) => ({
+            ...lane,
+            assignedEvidenceIds: lane.assignedEvidenceIds.filter((id) =>
+              evidenceIds.has(id),
+            ),
+          })),
         })),
         outputs: {
           summary: mission.outputs?.summary ?? mission.goal ?? '',
@@ -210,12 +395,24 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
     settings: {
       ...candidate.settings,
       schemaVersion: SCHEMA_VERSION,
-      density: candidate.settings?.density ?? defaultWorkspace.settings.density,
+      density:
+        candidate.settings?.density === 'comfortable' ||
+        candidate.settings?.density === 'compact'
+          ? candidate.settings.density
+          : defaultWorkspace.settings.density,
       missionStatusFilter: isMissionStatusFilter(candidate.settings?.missionStatusFilter)
         ? candidate.settings.missionStatusFilter
         : defaultWorkspace.settings.missionStatusFilter,
-      mobilePanel: candidate.settings?.mobilePanel ?? defaultWorkspace.settings.mobilePanel,
-      showGuidance: candidate.settings?.showGuidance ?? defaultWorkspace.settings.showGuidance,
+      mobilePanel:
+        candidate.settings?.mobilePanel === 'missions' ||
+        candidate.settings?.mobilePanel === 'work' ||
+        candidate.settings?.mobilePanel === 'inspector'
+          ? candidate.settings.mobilePanel
+          : defaultWorkspace.settings.mobilePanel,
+      showGuidance:
+        typeof candidate.settings?.showGuidance === 'boolean'
+          ? candidate.settings.showGuidance
+          : defaultWorkspace.settings.showGuidance,
     },
   }
 }
@@ -226,6 +423,17 @@ export function parseWorkspaceImport(rawJson: string): WorkspaceState {
   }
 
   const parsed = JSON.parse(rawJson)
+
+  if (
+    isRecord(parsed) &&
+    isRecord(parsed.settings) &&
+    typeof parsed.settings.schemaVersion === 'number' &&
+    parsed.settings.schemaVersion > SCHEMA_VERSION
+  ) {
+    throw new Error(
+      `Workspace schema ${parsed.settings.schemaVersion} is newer than supported schema ${SCHEMA_VERSION}.`,
+    )
+  }
 
   if (!isWorkspace(parsed)) {
     throw new Error('Imported file is not a PatchHive workspace.')

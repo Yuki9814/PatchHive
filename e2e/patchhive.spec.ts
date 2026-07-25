@@ -10,7 +10,7 @@ test('creates a mission, links evidence, and unlocks handoff export', async ({ p
   await page.setViewportSize({ width: 390, height: 820 })
   await page.getByRole('button', { name: 'Inspector' }).click()
   await expect(page.getByLabel('Evidence, approvals, and handoff')).toBeVisible()
-  await page.getByRole('button', { name: 'Work' }).click()
+  await page.getByRole('button', { name: 'Work', exact: true }).click()
   await page.setViewportSize({ width: 1280, height: 900 })
 
   await page.getByRole('button', { name: 'New mission' }).click()
@@ -58,4 +58,65 @@ test('rejects invalid workspace JSON imports', async ({ page }) => {
   })
 
   await expect(page.getByText(/not a PatchHive workspace/i)).toBeVisible()
+})
+
+test('previews and imports an agent-hygiene SARIF file without interpreting finding text as HTML', async ({
+  page,
+}) => {
+  const sarif = {
+    version: '2.1.0',
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: 'agent-hygiene',
+            version: '0.3.0',
+            rules: [{ id: 'AH003', shortDescription: { text: 'Hard-coded secret' } }],
+          },
+        },
+        invocations: [{ executionSuccessful: true }],
+        results: [
+          {
+            ruleId: 'AH003',
+            level: 'error',
+            message: {
+              text: '<img src=x onerror=alert(1)> stays text. Fix: Remove the literal.',
+            },
+            locations: [
+              {
+                physicalLocation: {
+                  artifactLocation: { uri: 'AGENTS.md' },
+                  region: { startLine: 4 },
+                },
+              },
+            ],
+            partialFingerprints: {
+              'agentHygieneFingerprint/v1': '44444444444444444444',
+            },
+            properties: {
+              severity: 'critical',
+              remediation: 'Move the value to a secret store.',
+            },
+          },
+        ],
+      },
+    ],
+  }
+
+  await page.getByLabel('Import agent-hygiene scan').setInputFiles({
+    name: 'agent-hygiene.sarif',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(sarif)),
+  })
+
+  await expect(page.getByLabel('agent-hygiene import preview')).toContainText(
+    'SARIF · 1 findings · complete',
+  )
+  await page.getByRole('button', { name: 'Import into current stage' }).click()
+
+  const importedCard = page.getByRole('article').filter({ hasText: 'AH003 · Hard-coded secret' })
+  await expect(importedCard).toContainText('agent-hygiene SARIF')
+  await expect(importedCard).toContainText('<img src=x onerror=alert(1)>')
+  await expect(page.locator('img[src="x"]')).toHaveCount(0)
+  await expect(page.getByText(/1 high-severity imported finding/)).toBeVisible()
 })
