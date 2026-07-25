@@ -78,6 +78,7 @@ jobs:
         run: |
           version="${RELEASE_TAG#v}"
           gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
             "release-dist/patchhive-${version}-pages.zip" \
             "release-dist/SHA256SUMS" \
             --verify-tag \
