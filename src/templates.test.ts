@@ -15,6 +15,9 @@ describe('templates', () => {
       parsedRepo: 'owner.name/repo-name',
       parsedNumber: '91',
     })
+    expect(parseGithubSource('https://example.com/owner/repo/issues/7')).toEqual({})
+    expect(parseGithubSource('javascript:alert(1)')).toEqual({})
+    expect(parseGithubSource('https://user:secret@github.com/owner/repo/issues/7')).toEqual({})
   })
 
   it('creates a mission with parsed repo, source evidence, and export gates', () => {

@@ -14,6 +14,7 @@ import {
   serializeWorkspaceExport,
 } from './storage'
 import { parseGithubSource } from './templates'
+import { normalizeExternalUrl } from './safeUrl'
 import type { ChangeEvent, FormEvent } from 'react'
 import { workspaceReducer } from './workspaceReducer'
 import {
@@ -145,12 +146,21 @@ function App() {
       return
     }
 
+    const normalizedEvidenceUrl = evidenceForm.url.trim()
+      ? normalizeExternalUrl(evidenceForm.url)
+      : undefined
+
+    if (evidenceForm.url.trim() && !normalizedEvidenceUrl) {
+      setStatusMessage('Evidence links must use an http or https URL without embedded credentials.')
+      return
+    }
+
     const evidencePayload = {
       kind: evidenceForm.kind,
       title: evidenceForm.title.trim(),
       detail: evidenceForm.detail.trim(),
       sourceText: evidenceForm.sourceText.trim() || undefined,
-      url: evidenceForm.url.trim() || undefined,
+      url: normalizedEvidenceUrl,
       filePath: evidenceForm.filePath.trim() || undefined,
       stageId: evidenceForm.stageId || undefined,
       agentId: evidenceForm.agentId || undefined,
@@ -207,6 +217,17 @@ function App() {
   }
 
   const deleteEvidence = (evidenceId: string) => {
+    const evidence = activeMission.evidence.find((item) => item.id === evidenceId)
+
+    if (
+      evidence?.provenance?.importer === 'agent-hygiene' &&
+      !evidence.provenance.scanComplete &&
+      evidence.triageStatus !== 'resolved'
+    ) {
+      setStatusMessage('Incomplete scan evidence stays locked until a complete rerun is imported.')
+      return
+    }
+
     if (!window.confirm('Delete this evidence record? Handoff source links for it will be removed.')) {
       setStatusMessage('Evidence deletion cancelled.')
       return

@@ -6,6 +6,26 @@ export type EvidenceKind = 'file' | 'log' | 'decision' | 'link' | 'diff'
 
 export type RiskLevel = 'low' | 'medium' | 'high'
 
+export type ScanSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info'
+
+export type EvidenceTriageStatus = 'open' | 'accepted' | 'resolved'
+
+export type EvidenceProvenance = {
+  importer: 'agent-hygiene'
+  format: 'json' | 'sarif'
+  sourceName: string
+  toolName: 'agent-hygiene'
+  producerStatus?: 'declared' | 'unverified'
+  producerVersion?: string
+  scanComplete: boolean
+  importedAt: string
+  scanRoot?: string
+  scopeId?: string
+  ruleId?: string
+  fingerprint?: string
+  findingKey?: string
+}
+
 export type MissionStatus = 'active' | 'ready' | 'archived'
 
 export type MissionStatusFilter = 'all' | MissionStatus
@@ -51,6 +71,9 @@ export type EvidenceItem = {
   filePath?: string
   stageId?: string
   agentId?: string
+  severity?: ScanSeverity
+  triageStatus?: EvidenceTriageStatus
+  provenance?: EvidenceProvenance
   createdAt: string
   updatedAt: string
 }

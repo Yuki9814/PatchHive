@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.repository == 'Yuki9814/PatchHive'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verify tag matches package version
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$RELEASE_TAG" = "v$(node -p "require('./package.json').version")"
+      - run: npm ci
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Package the verified Pages build
+        run: |
+          version="${RELEASE_TAG#v}"
+          mkdir release-dist
+          zip -qr "release-dist/patchhive-${version}-pages.zip" dist
+          (
+            cd release-dist
+            shasum -a 256 "patchhive-${version}-pages.zip" > SHA256SUMS
+          )
+      - name: Upload verified release artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-dist
+          path: release-dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  github-release:
+    needs: verify
+    if: github.repository == 'Yuki9814/PatchHive'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    environment: release
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Download verified release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-dist
+          path: release-dist
+      - name: Verify artifact names and checksums
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version="${RELEASE_TAG#v}"
+          archive="release-dist/patchhive-${version}-pages.zip"
+          checksums="release-dist/SHA256SUMS"
+          test -f "$archive"
+          test -f "$checksums"
+          test "$(find release-dist -maxdepth 1 -type f | wc -l | tr -d ' ')" = "2"
+          (cd release-dist && shasum -a 256 -c SHA256SUMS)
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          gh release create "$RELEASE_TAG" \
+            "release-dist/patchhive-${version}-pages.zip" \
+            "release-dist/SHA256SUMS" \
+            --verify-tag \
+            --title "$RELEASE_TAG" \
+            --generate-notes

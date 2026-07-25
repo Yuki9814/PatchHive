@@ -102,4 +102,62 @@ describe('handoff', () => {
     expect(getHandoffBlockers(mission)).toContain('At least one handoff field needs evidence source coverage')
     expect(isHandoffReady(mission)).toBe(false)
   })
+
+  it('keeps incomplete and open high-severity scanner imports as explicit handoff blockers', () => {
+    const mission = readyMission()
+    const importedAt = '2026-07-26T00:00:00.000Z'
+    const scannerEvidence = {
+      id: 'scanner-evidence',
+      kind: 'file' as const,
+      title: 'AH003 · Hard-coded secret',
+      detail:
+        '<img src=x> ![tracking](https://example.com/pixel) @openai/security #123 needs review.',
+      filePath: 'AGENTS.md:4',
+      severity: 'critical' as const,
+      triageStatus: 'open' as const,
+      provenance: {
+        importer: 'agent-hygiene' as const,
+        format: 'json' as const,
+        sourceName: 'scan.json',
+        toolName: 'agent-hygiene' as const,
+        scanComplete: false,
+        importedAt,
+        ruleId: 'AH003',
+      },
+      createdAt: importedAt,
+      updatedAt: importedAt,
+    }
+    const scanSummaryEvidence = {
+      ...scannerEvidence,
+      id: 'scanner-summary',
+      kind: 'decision' as const,
+      title: 'agent-hygiene scan summary',
+      detail: 'agent-hygiene JSON scan · incomplete',
+      severity: 'high' as const,
+      provenance: {
+        ...scannerEvidence.provenance,
+        ruleId: 'scan/summary',
+      },
+    }
+    const blockers = getHandoffBlockers({
+      ...mission,
+      evidence: [scanSummaryEvidence, scannerEvidence, ...mission.evidence],
+    })
+
+    expect(blockers).toContain(
+      'Imported scan scan.json is incomplete; import a complete rerun before handoff',
+    )
+    expect(blockers).toContain('1 high-severity imported finding(s) still need triage')
+    const markdown = buildHandoffMarkdown({
+      ...mission,
+      evidence: [scanSummaryEvidence, scannerEvidence, ...mission.evidence],
+    })
+
+    expect(markdown).toContain('\\<img src=x\\> \\!\\[tracking\\]')
+    expect(markdown).toContain('@\u200Bopenai/security')
+    expect(markdown).toContain('#\u200B123')
+    expect(markdown).toContain('https:\u200B//example.\u200Bcom/pixel')
+    expect(markdown).not.toContain('@openai/security')
+    expect(markdown).not.toContain('https://example.com/pixel')
+  })
 })

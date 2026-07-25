@@ -1,4 +1,6 @@
 import { getHandoffEvidenceCoverage, getHandoffFieldSourceIds, handoffEvidenceTargets } from './handoffCoverage'
+import { neutralizeUntrustedMarkdown } from './safeMarkdown'
+import { normalizeExternalUrl } from './safeUrl'
 import type { ApprovalGate, EvidenceItem, Mission, MissionStage } from './types'
 
 function listItems(items: string[]) {
@@ -10,8 +12,21 @@ function listItems(items: string[]) {
 }
 
 function evidenceLine(item: EvidenceItem) {
-  const source = item.url ? ` (${item.url})` : item.filePath ? ` (${item.filePath})` : ''
-  return `- [${item.kind}] ${item.title}: ${item.detail}${source}`
+  const safeUrl = item.url ? normalizeExternalUrl(item.url) : undefined
+  const isImported = Boolean(item.provenance)
+  const display = (value: string) => (isImported ? neutralizeUntrustedMarkdown(value) : value)
+  const source = safeUrl
+    ? isImported
+      ? ` (${display(safeUrl)})`
+      : ` (<${safeUrl}>)`
+    : item.filePath
+      ? ` (${display(item.filePath)})`
+      : ''
+  const severity = item.severity ? ` ${item.severity}/${item.triageStatus ?? 'open'}` : ''
+  const provenance = item.provenance
+    ? `; imported from ${item.provenance.toolName} ${item.provenance.format.toUpperCase()} (${neutralizeUntrustedMarkdown(item.provenance.sourceName)}; producer ${item.provenance.producerStatus ?? 'unverified'})`
+    : ''
+  return `- [${item.kind}${severity}] ${display(item.title)}: ${display(item.detail)}${source}${provenance}`
 }
 
 function approvalLine(item: ApprovalGate) {
@@ -28,7 +43,12 @@ function sourceCoverageLine(mission: Mission, field: (typeof handoffEvidenceTarg
   const sources = getHandoffFieldSourceIds(mission, field)
     .map((id) => evidenceById.get(id))
     .filter(Boolean)
-    .map((item) => `${item?.title} (${item?.kind})`)
+    .map((item) => {
+      const title = item?.provenance
+        ? neutralizeUntrustedMarkdown(item.title)
+        : item?.title
+      return `${title} (${item?.kind})`
+    })
 
   return `- ${field}: ${sources.length > 0 ? sources.join(', ') : 'No evidence source mapped'}`
 }
@@ -45,6 +65,42 @@ function getPendingApprovalBlockers(mission: Mission) {
   return mission.approvals
     .filter((approval) => !approval.approved)
     .map(approvalBlockerLine)
+}
+
+function getImportedScanBlockers(mission: Mission) {
+  const incompleteImports = new Map<string, string>()
+  let openHighSeverity = 0
+
+  mission.evidence.forEach((evidence) => {
+    if (!evidence.provenance || evidence.triageStatus === 'resolved') {
+      return
+    }
+
+    if (!evidence.provenance.scanComplete) {
+      incompleteImports.set(
+        evidence.provenance.scopeId ??
+          `${evidence.provenance.sourceName}:${evidence.provenance.importedAt}`,
+        evidence.provenance.sourceName,
+      )
+    }
+
+    if (
+      evidence.triageStatus === 'open' &&
+      (evidence.severity === 'critical' || evidence.severity === 'high') &&
+      evidence.provenance.ruleId !== 'scan/summary'
+    ) {
+      openHighSeverity += 1
+    }
+  })
+
+  return [
+    ...[...incompleteImports.values()].map(
+      (sourceName) => `Imported scan ${sourceName} is incomplete; import a complete rerun before handoff`,
+    ),
+    ...(openHighSeverity > 0
+      ? [`${openHighSeverity} high-severity imported finding(s) still need triage`]
+      : []),
+  ]
 }
 
 export function getStageGateBlocker(mission: Mission, targetStageId: string) {
@@ -70,7 +126,7 @@ export function getNextStageGateBlocker(mission: Mission) {
 }
 
 export function getHandoffBlockers(mission: Mission) {
-  const blockers = getPendingApprovalBlockers(mission)
+  const blockers = [...getPendingApprovalBlockers(mission), ...getImportedScanBlockers(mission)]
 
   const requiredDrafts: Array<[label: string, value: string]> = [
     ['Summary', mission.outputs.summary],

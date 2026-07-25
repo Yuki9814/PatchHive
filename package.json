@@ -1,14 +1,16 @@
 {
   "name": "patchhive",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
-    "check": "npm run lint && npm test && npm run build",
+    "test:pages": "node scripts/verify-pages-build.mjs",
+    "audit:deps": "npm audit --audit-level=high",
+    "check": "npm run lint && npm test && npm run build && npm run test:pages && npm run audit:deps",
     "test:e2e": "playwright test",
     "preview": "vite preview"
   },
@@ -17,7 +19,7 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.60.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -26,11 +28,12 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.0",
-    "eslint": "^9.39.4",
-    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "jsdom": "^29.1.1",
+    "postcss": "^8.5.23",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.0",

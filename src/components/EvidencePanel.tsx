@@ -1,5 +1,5 @@
 import { getEvidenceHandoffFields, getEvidenceWorkflowStatus } from '../handoffCoverage'
-import type { EvidenceKind, Mission, MissionStage } from '../types'
+import type { EvidenceKind, EvidenceTriageStatus, Mission, MissionStage } from '../types'
 import {
   evidenceKinds,
   getMissionLaneName,
@@ -27,6 +27,7 @@ type EvidencePanelProps = {
   onStartEvidenceEdit: (evidenceId: string) => void
   onCancelEvidenceEdit: () => void
   onDeleteEvidence: (evidenceId: string) => void
+  onSetEvidenceTriage: (evidenceId: string, triageStatus: EvidenceTriageStatus) => void
 }
 
 const evidenceStatusLabels = {
@@ -53,6 +54,7 @@ export function EvidencePanel({
   onStartEvidenceEdit,
   onCancelEvidenceEdit,
   onDeleteEvidence,
+  onSetEvidenceTriage,
 }: EvidencePanelProps) {
   const currentLanes = activeStage.lanes
   const missionLanes = mission.stages.flatMap((stage) => stage.lanes)
@@ -127,16 +129,17 @@ export function EvidencePanel({
           onChange={(event) => onEvidenceFormChange({ ...evidenceForm, sourceText: event.target.value })}
         />
         <input
-          aria-label="Evidence URL or file path"
-          placeholder="URL or file path"
-          value={evidenceForm.url || evidenceForm.filePath}
-          onChange={(event) =>
-            onEvidenceFormChange({
-              ...evidenceForm,
-              url: event.target.value.startsWith('http') ? event.target.value : '',
-              filePath: event.target.value.startsWith('http') ? '' : event.target.value,
-            })
-          }
+          aria-label="Evidence URL"
+          inputMode="url"
+          placeholder="https://github.com/owner/repo/issues/123"
+          value={evidenceForm.url}
+          onChange={(event) => onEvidenceFormChange({ ...evidenceForm, url: event.target.value })}
+        />
+        <input
+          aria-label="Evidence file path"
+          placeholder="src/parser.ts:42"
+          value={evidenceForm.filePath}
+          onChange={(event) => onEvidenceFormChange({ ...evidenceForm, filePath: event.target.value })}
         />
         <div className="evidence-form-actions">
           <button className="secondary-button" type="submit">
@@ -213,11 +216,52 @@ export function EvidencePanel({
               </small>
               {handoffFields ? <small>Mapped to {handoffFields}</small> : null}
               {evidence.sourceText ? <code>{evidence.sourceText.slice(0, 160)}</code> : null}
+              {evidence.provenance ? (
+                <small>
+                  Imported from {evidence.provenance.toolName} {evidence.provenance.format.toUpperCase()} ·{' '}
+                  {evidence.provenance.sourceName} · producer{' '}
+                  {evidence.provenance.producerStatus ?? 'unverified'} ·{' '}
+                  {evidence.severity ?? 'info'} / {evidence.triageStatus ?? 'open'}
+                </small>
+              ) : null}
               <small>Updated {evidence.updatedAt}</small>
               <div className="evidence-item__actions">
-                <button className="subtle-button" type="button" onClick={() => onStartEvidenceEdit(evidence.id)}>
-                  Edit
-                </button>
+                {evidence.provenance &&
+                evidence.triageStatus === 'open' &&
+                evidence.provenance.scanComplete ? (
+                  <>
+                    <button
+                      className="subtle-button"
+                      type="button"
+                      onClick={() => onSetEvidenceTriage(evidence.id, 'accepted')}
+                    >
+                      Accept risk
+                    </button>
+                    <button
+                      className="subtle-button"
+                      type="button"
+                      onClick={() => onSetEvidenceTriage(evidence.id, 'resolved')}
+                    >
+                      Mark resolved
+                    </button>
+                  </>
+                ) : null}
+                {evidence.provenance &&
+                evidence.provenance.scanComplete &&
+                evidence.triageStatus !== 'open' ? (
+                  <button
+                    className="subtle-button"
+                    type="button"
+                    onClick={() => onSetEvidenceTriage(evidence.id, 'open')}
+                  >
+                    Reopen
+                  </button>
+                ) : null}
+                {!evidence.provenance ? (
+                  <button className="subtle-button" type="button" onClick={() => onStartEvidenceEdit(evidence.id)}>
+                    Edit
+                  </button>
+                ) : null}
                 <button className="subtle-button subtle-button--danger" type="button" onClick={() => onDeleteEvidence(evidence.id)}>
                   Delete
                 </button>

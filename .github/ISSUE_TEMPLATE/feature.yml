@@ -1,0 +1,33 @@
+name: Maintainer workflow proposal
+description: Propose a bounded improvement to PatchHive's local-first workflow.
+title: "proposal: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: maintainer-problem
+    attributes:
+      label: Maintainer problem
+      description: Describe the repeated workflow cost, not only the requested UI.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Share sanitized examples, frequency, or current workarounds.
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Local-first impact
+      description: Explain any effect on storage, network access, credentials, or external posting.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable outcomes and tests.
+    validations:
+      required: true
