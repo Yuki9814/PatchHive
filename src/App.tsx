@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import './App.css'
 import { Inspector } from './components/Inspector'
 import { MissionComposer } from './components/MissionComposer'
 import { MissionSidebar } from './components/MissionSidebar'
 import { MissionWorkspace } from './components/MissionWorkspace'
-import { buildHandoffMarkdown, getHandoffBlockers, getNextStageGateBlocker, isHandoffReady } from './handoff'
+import { filterAndSortEvidence } from './evidenceView'
+import type {
+  EvidenceSeverityFilter,
+  EvidenceTriageFilter,
+} from './evidenceView'
+import { buildHandoffMarkdown, getHandoffBlockers, getNextStageGateBlocker } from './handoff'
 import { getHandoffFieldStatuses, getMissionHealth } from './missionHealth'
 import {
   MAX_WORKSPACE_IMPORT_BYTES,
@@ -37,6 +42,10 @@ function App() {
   const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>('all')
   const [evidenceStageFilter, setEvidenceStageFilter] = useState('all')
   const [evidenceAgentFilter, setEvidenceAgentFilter] = useState('all')
+  const [evidenceSeverityFilter, setEvidenceSeverityFilter] =
+    useState<EvidenceSeverityFilter>('all')
+  const [evidenceTriageFilter, setEvidenceTriageFilter] =
+    useState<EvidenceTriageFilter>('all')
   const [editingEvidenceId, setEditingEvidenceId] = useState<string | null>(null)
   const [findingDrafts, setFindingDrafts] = useState<Record<string, string>>({})
   const [statusMessage, setStatusMessage] = useState('Workspace loaded.')
@@ -58,8 +67,44 @@ function App() {
 
   const activeMission = getActiveMission(state.missions, state.activeMissionId)
   const activeStage = activeMission?.stages.find((stage) => stage.id === activeMission.activeStageId)
+  const derivedWorkspace = useMemo(() => {
+    if (!activeMission || !activeStage) {
+      return null
+    }
 
-  if (!activeMission || !activeStage) {
+    const handoffBlockers = getHandoffBlockers(activeMission)
+
+    return {
+      handoffMarkdown: buildHandoffMarkdown(activeMission),
+      handoffReady: handoffBlockers.length === 0,
+      handoffBlockers,
+      missionHealth: getMissionHealth(activeMission, handoffBlockers),
+      handoffFieldStatusMap: Object.fromEntries(
+        getHandoffFieldStatuses(activeMission).map((field) => [field.key, field]),
+      ),
+      nextStageGateBlocker: getNextStageGateBlocker(activeMission),
+      filteredEvidence: filterAndSortEvidence(activeMission.evidence, {
+        kind: evidenceFilter,
+        stageId: evidenceStageFilter,
+        agentId: evidenceAgentFilter,
+        severity: evidenceSeverityFilter,
+        triage: evidenceTriageFilter,
+      }),
+      unlinkedEvidenceCount: activeMission.evidence.filter(
+        (evidence) => !evidence.stageId && !evidence.agentId,
+      ).length,
+    }
+  }, [
+    activeMission,
+    activeStage,
+    evidenceAgentFilter,
+    evidenceFilter,
+    evidenceSeverityFilter,
+    evidenceStageFilter,
+    evidenceTriageFilter,
+  ])
+
+  if (!activeMission || !activeStage || !derivedWorkspace) {
     return (
       <main className="empty-app">
         <h1>PatchHive</h1>
@@ -71,38 +116,16 @@ function App() {
     )
   }
 
-  const handoffMarkdown = buildHandoffMarkdown(activeMission)
-  const handoffReady = isHandoffReady(activeMission)
-  const handoffBlockers = getHandoffBlockers(activeMission)
-  const missionHealth = getMissionHealth(activeMission)
-  const handoffFieldStatusMap = Object.fromEntries(
-    getHandoffFieldStatuses(activeMission).map((field) => [field.key, field]),
-  )
-  const nextStageGateBlocker = getNextStageGateBlocker(activeMission)
-  const filteredEvidence = activeMission.evidence
-    .filter((evidence) => {
-      if (evidenceFilter === 'all') {
-        return true
-      }
-
-      if (evidenceFilter === 'unlinked') {
-        return !evidence.stageId && !evidence.agentId
-      }
-
-      return evidence.kind === evidenceFilter
-    })
-    .filter((evidence) => {
-      if (evidenceStageFilter !== 'all' && evidence.stageId !== evidenceStageFilter) {
-        return false
-      }
-
-      if (evidenceAgentFilter !== 'all' && evidence.agentId !== evidenceAgentFilter) {
-        return false
-      }
-
-      return true
-    })
-  const unlinkedEvidenceCount = activeMission.evidence.filter((evidence) => !evidence.stageId && !evidence.agentId).length
+  const {
+    filteredEvidence,
+    handoffBlockers,
+    handoffFieldStatusMap,
+    handoffMarkdown,
+    handoffReady,
+    missionHealth,
+    nextStageGateBlocker,
+    unlinkedEvidenceCount,
+  } = derivedWorkspace
 
   const handleTemplateChange = (templateId: string) => {
     setComposer(createComposerInput(getTemplate(templateId)))
@@ -221,10 +244,9 @@ function App() {
 
     if (
       evidence?.provenance?.importer === 'agent-hygiene' &&
-      !evidence.provenance.scanComplete &&
       evidence.triageStatus !== 'resolved'
     ) {
-      setStatusMessage('Incomplete scan evidence stays locked until a complete rerun is imported.')
+      setStatusMessage('Imported scanner evidence stays locked until it is resolved.')
       return
     }
 
@@ -416,7 +438,9 @@ function App() {
         evidenceAgentFilter={evidenceAgentFilter}
         evidenceFilter={evidenceFilter}
         evidenceForm={evidenceForm}
+        evidenceSeverityFilter={evidenceSeverityFilter}
         evidenceStageFilter={evidenceStageFilter}
+        evidenceTriageFilter={evidenceTriageFilter}
         filteredEvidence={filteredEvidence}
         handoffBlockers={handoffBlockers}
         handoffFieldStatusMap={handoffFieldStatusMap}
@@ -430,7 +454,9 @@ function App() {
         onEvidenceAgentFilterChange={setEvidenceAgentFilter}
         onEvidenceFilterChange={setEvidenceFilter}
         onEvidenceFormChange={setEvidenceForm}
+        onEvidenceSeverityFilterChange={setEvidenceSeverityFilter}
         onEvidenceStageFilterChange={setEvidenceStageFilter}
+        onEvidenceTriageFilterChange={setEvidenceTriageFilter}
         onStartEvidenceEdit={startEvidenceEdit}
         onStatusMessage={setStatusMessage}
         onSubmitEvidence={submitEvidence}

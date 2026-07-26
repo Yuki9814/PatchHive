@@ -2,6 +2,11 @@ import { getNextStageGateBlocker } from './handoff'
 import type { AgentHygieneScan } from './agentHygieneImport'
 import { neutralizeUntrustedMarkdown } from './safeMarkdown'
 import { deriveFindingKey, deriveScanScopeId } from './scanIdentity'
+import {
+  isAcceptedScannerRiskMissingResolution,
+  isScannerRiskEvidence,
+  normalizeResolutionNote,
+} from './scannerTriage'
 import { createDefaultWorkspace } from './storage'
 import { createMissionFromInput } from './templates'
 import type {
@@ -33,6 +38,13 @@ export type WorkspaceAction =
       missionId: string
       evidenceId: string
       evidence: Partial<Omit<EvidenceItem, 'id' | 'createdAt' | 'updatedAt'>>
+    }
+  | {
+      type: 'set-scanner-triage'
+      missionId: string
+      evidenceId: string
+      triageStatus: NonNullable<EvidenceItem['triageStatus']>
+      resolutionNote?: string
     }
   | { type: 'delete-evidence'; missionId: string; evidenceId: string }
   | { type: 'update-mission-status'; missionId: string; status: MissionStatus }
@@ -131,11 +143,7 @@ function scanFindingKey(finding: AgentHygieneScan['findings'][number]) {
 }
 
 function isScannerFinding(evidence: EvidenceItem) {
-  return (
-    evidence.provenance?.importer === 'agent-hygiene' &&
-    evidence.provenance.ruleId !== 'scan/summary' &&
-    !evidence.provenance.ruleId?.startsWith('discovery/')
-  )
+  return isScannerRiskEvidence(evidence)
 }
 
 function evidenceMatchesFinding(
@@ -170,12 +178,18 @@ export function getAgentHygieneImportConflict(mission: Mission, scan: AgentHygie
   )
 
   for (const finding of scan.findings) {
+    const findingKey = scanFindingKey(finding)
     const fingerprintMatch = finding.fingerprint
       ? existingByFingerprint.get(finding.fingerprint)
       : undefined
-    const findingKeyMatch = existingByFindingKey.get(scanFindingKey(finding))
+    const findingKeyMatch = existingByFindingKey.get(findingKey)
 
-    if (fingerprintMatch && !evidenceMatchesFinding(fingerprintMatch, finding)) {
+    if (
+      fingerprintMatch &&
+      (fingerprintMatch.provenance?.findingKey
+        ? fingerprintMatch.provenance.findingKey !== findingKey
+        : !evidenceMatchesFinding(fingerprintMatch, finding))
+    ) {
       return `Fingerprint collision: ${finding.fingerprint} identifies different normalized findings in this scan scope.`
     }
 
@@ -190,6 +204,10 @@ export function getAgentHygieneImportConflict(mission: Mission, scan: AgentHygie
 function isOpenScannerBlocker(evidence: EvidenceItem) {
   if (!evidence.provenance || evidence.triageStatus === 'resolved') {
     return false
+  }
+
+  if (isAcceptedScannerRiskMissingResolution(evidence)) {
+    return true
   }
 
   if (!evidence.provenance.scanComplete) {
@@ -352,23 +370,68 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
             return item
           }
 
-          const permittedUpdate = item.provenance
-            ? { triageStatus: action.evidence.triageStatus }
-            : action.evidence
+          if (item.provenance) {
+            return item
+          }
 
           return {
-                ...item,
-                ...permittedUpdate,
-                triageStatus:
-                  item.provenance &&
-                  !item.provenance.scanComplete &&
-                  permittedUpdate.triageStatus &&
-                  permittedUpdate.triageStatus !== 'open'
-                    ? 'open' as const
-                    : (permittedUpdate.triageStatus ?? item.triageStatus),
-                updatedAt,
-              }
+            ...item,
+            ...action.evidence,
+            updatedAt,
+          }
         })
+        const hasScannerBlocker = evidence.some(isOpenScannerBlocker)
+
+        return touch({
+          ...mission,
+          evidence,
+          stages: mission.stages.map((stage) => ({
+            ...stage,
+            lanes: stage.lanes.map((lane) =>
+              lane.id === 'review-agent' && lane.outputDraft.startsWith('agent-hygiene ')
+                ? {
+                    ...lane,
+                    status: hasScannerBlocker ? 'blocked' : 'ready',
+                  }
+                : lane,
+            ),
+          })),
+          outputs: {
+            ...mission.outputs,
+            ready: false,
+          },
+        })
+      })
+
+    case 'set-scanner-triage':
+      return mutateMission(state, action.missionId, (mission) => {
+        const updatedAt = now()
+        const resolutionNote = normalizeResolutionNote(action.resolutionNote)
+        let changed = false
+        const evidence = mission.evidence.map((item) => {
+          if (
+            item.id !== action.evidenceId ||
+            !isScannerRiskEvidence(item) ||
+            !item.provenance?.scanComplete ||
+            (action.triageStatus === 'accepted' && !resolutionNote)
+          ) {
+            return item
+          }
+
+          changed = true
+          return {
+            ...item,
+            triageStatus: action.triageStatus,
+            resolutionNote:
+              action.triageStatus === 'accepted' ? resolutionNote : undefined,
+            updatedAt,
+          }
+        })
+
+        if (!changed) {
+          return mission
+        }
+
         const hasScannerBlocker = evidence.some(isOpenScannerBlocker)
 
         return touch({
@@ -398,7 +461,6 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
 
         if (
           target?.provenance?.importer === 'agent-hygiene' &&
-          !target.provenance.scanComplete &&
           target.triageStatus !== 'resolved'
         ) {
           return mission
@@ -613,6 +675,8 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
 
             if (matchingFinding) {
               const findingKey = scanFindingKey(matchingFinding)
+              const preserveAcceptance =
+                action.scan.scanComplete && evidence.triageStatus === 'accepted'
               matchedFindingKeys.add(findingKey)
               touchedEvidenceIds.add(evidence.id)
 
@@ -624,10 +688,10 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
                 stageId: stage.id,
                 agentId: reviewLane?.id,
                 severity: matchingFinding.severity,
-                triageStatus:
-                  action.scan.scanComplete && evidence.triageStatus === 'accepted'
-                    ? ('accepted' as const)
-                    : ('open' as const),
+                triageStatus: preserveAcceptance ? ('accepted' as const) : ('open' as const),
+                resolutionNote: preserveAcceptance
+                  ? normalizeResolutionNote(evidence.resolutionNote)
+                  : undefined,
                 provenance: {
                   ...sharedProvenance,
                   ruleId: matchingFinding.ruleId,
@@ -643,6 +707,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
               return {
                 ...evidence,
                 triageStatus: 'resolved' as const,
+                resolutionNote: undefined,
                 provenance: {
                   ...provenance,
                   ...sharedProvenance,
@@ -739,40 +804,93 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
         ].join('\n')
         const hasScannerBlocker = nextEvidence.some(isOpenScannerBlocker)
         const reviewFindingTexts = new Set(reviewFindings.map((finding) => finding.text))
+        const scannerEvidenceIds = new Set<string>()
+        const scannerEvidenceIdsByStage = new Map<
+          string,
+          Map<string, string[]>
+        >()
+
+        nextEvidence.forEach((evidence) => {
+          if (evidence.provenance?.importer !== 'agent-hygiene') {
+            return
+          }
+
+          scannerEvidenceIds.add(evidence.id)
+
+          if (!evidence.stageId || !evidence.agentId) {
+            return
+          }
+
+          const stageAssignments =
+            scannerEvidenceIdsByStage.get(evidence.stageId) ??
+            new Map<string, string[]>()
+          stageAssignments.set(evidence.agentId, [
+            ...(stageAssignments.get(evidence.agentId) ?? []),
+            evidence.id,
+          ])
+          scannerEvidenceIdsByStage.set(evidence.stageId, stageAssignments)
+        })
 
         return touch({
           ...mission,
           status: 'active',
           evidence: nextEvidence,
-          stages: mission.stages.map((missionStage) =>
-            missionStage.id !== stage.id || !reviewLane
-              ? missionStage
-              : {
-                  ...missionStage,
-                  lanes: missionStage.lanes.map((lane) =>
-                    lane.id !== reviewLane.id
-                      ? lane
-                      : {
-                          ...lane,
-                          status: hasScannerBlocker ? 'blocked' : 'ready',
-                          confidence: action.scan.scanComplete ? 95 : 55,
-                          findings: [
-                            ...reviewFindings,
-                            ...lane.findings.filter(
-                              (finding) => !reviewFindingTexts.has(finding.text),
-                            ),
-                          ],
-                          assignedEvidenceIds: [
-                            ...new Set([
-                              ...touchedEvidenceIds,
-                              ...lane.assignedEvidenceIds,
-                            ]),
-                          ],
-                          outputDraft: scanSummaryLine(action.scan),
-                        },
+          stages: mission.stages.map((missionStage) => ({
+            ...missionStage,
+            lanes: missionStage.lanes.map((lane) => {
+              const assignedScannerEvidenceIds =
+                scannerEvidenceIdsByStage.get(missionStage.id)?.get(lane.id) ?? []
+              const hadScannerAssignment = lane.assignedEvidenceIds.some((id) =>
+                scannerEvidenceIds.has(id),
+              )
+              const assignedEvidenceIds = [
+                ...new Set([
+                  ...assignedScannerEvidenceIds,
+                  ...lane.assignedEvidenceIds.filter(
+                    (id) => !scannerEvidenceIds.has(id),
                   ),
-                },
-          ),
+                ]),
+              ]
+              const isCurrentReviewLane =
+                missionStage.id === stage.id &&
+                Boolean(reviewLane) &&
+                lane.id === reviewLane?.id
+              const isScannerReviewLane =
+                isCurrentReviewLane ||
+                hadScannerAssignment ||
+                assignedScannerEvidenceIds.length > 0 ||
+                lane.outputDraft.startsWith('agent-hygiene ')
+
+              if (!isScannerReviewLane) {
+                return {
+                  ...lane,
+                  assignedEvidenceIds,
+                }
+              }
+
+              const reconciledLane = {
+                ...lane,
+                status: hasScannerBlocker ? ('blocked' as const) : ('ready' as const),
+                assignedEvidenceIds,
+              }
+
+              if (!isCurrentReviewLane) {
+                return reconciledLane
+              }
+
+              return {
+                ...reconciledLane,
+                confidence: action.scan.scanComplete ? 95 : 55,
+                findings: [
+                  ...reviewFindings,
+                  ...lane.findings.filter(
+                    (finding) => !reviewFindingTexts.has(finding.text),
+                  ),
+                ],
+                outputDraft: scanSummaryLine(action.scan),
+              }
+            }),
+          })),
           outputs: {
             ...mission.outputs,
             summary: appendSection(mission.outputs.summary, scanSummaryLine(action.scan)),

@@ -73,6 +73,7 @@ export type EvidenceItem = {
   agentId?: string
   severity?: ScanSeverity
   triageStatus?: EvidenceTriageStatus
+  resolutionNote?: string
   provenance?: EvidenceProvenance
   createdAt: string
   updatedAt: string

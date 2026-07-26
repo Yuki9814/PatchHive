@@ -160,4 +160,66 @@ describe('handoff', () => {
     expect(markdown).not.toContain('@openai/security')
     expect(markdown).not.toContain('https://example.com/pixel')
   })
+
+  it('fails closed for accepted scanner risks without a note and safely exports a note', () => {
+    const mission = readyMission()
+    const importedAt = '2026-07-26T00:00:00.000Z'
+    const acceptedRisk = {
+      id: 'accepted-scanner-risk',
+      kind: 'file' as const,
+      title: 'AH006 · Shell command risk',
+      detail: 'A generated workflow command needs review.',
+      filePath: '.github/workflows/scan.yml:12',
+      severity: 'high' as const,
+      triageStatus: 'accepted' as const,
+      provenance: {
+        importer: 'agent-hygiene' as const,
+        format: 'sarif' as const,
+        sourceName: 'scan.sarif',
+        toolName: 'agent-hygiene' as const,
+        producerStatus: 'declared' as const,
+        producerVersion: '0.3.0',
+        scanComplete: true,
+        importedAt,
+        scopeId: 'scope-accepted-risk',
+        ruleId: 'AH006',
+        fingerprint: '12121212121212121212',
+        findingKey: 'finding-accepted-risk',
+      },
+      createdAt: importedAt,
+      updatedAt: importedAt,
+    }
+    const missingNoteMission = {
+      ...mission,
+      evidence: [acceptedRisk, ...mission.evidence],
+    }
+
+    expect(getHandoffBlockers(missingNoteMission)).toContain(
+      '1 accepted scanner risk(s) need a non-empty resolution note',
+    )
+    expect(isHandoffReady(missingNoteMission)).toBe(false)
+
+    const documentedMission = {
+      ...missingNoteMission,
+      evidence: [
+        {
+          ...acceptedRisk,
+          resolutionNote:
+            'Owner @maintainer accepts #42 while https://example.com stays local.',
+        },
+        ...mission.evidence,
+      ],
+    }
+    const markdown = buildHandoffMarkdown(documentedMission)
+
+    expect(getHandoffBlockers(documentedMission)).not.toContain(
+      '1 accepted scanner risk(s) need a non-empty resolution note',
+    )
+    expect(markdown).toContain('## Accepted Scanner Risks')
+    expect(markdown).toContain('@\u200Bmaintainer')
+    expect(markdown).toContain('#\u200B42')
+    expect(markdown).toContain('https:\u200B//example.\u200Bcom')
+    expect(markdown).not.toContain('@maintainer')
+    expect(markdown).not.toContain('https://example.com')
+  })
 })

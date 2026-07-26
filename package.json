@@ -1,7 +1,7 @@
 {
   "name": "patchhive",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,6 +12,8 @@
     "audit:deps": "npm audit --audit-level=high",
     "check": "npm run lint && npm test && npm run build && npm run test:pages && npm run audit:deps",
     "test:e2e": "playwright test",
+    "benchmark:scanner": "npm run build && node scripts/scanner-benchmark.mjs",
+    "fixtures:scanner": "node scripts/generate-scan-fixtures.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

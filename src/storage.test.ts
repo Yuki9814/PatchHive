@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { getHandoffBlockers } from './handoff'
 import {
   createDefaultWorkspace,
   loadWorkspace,
@@ -21,7 +22,7 @@ describe('storage', () => {
     expect(loadWorkspace().missions[0].title).toBe('pypdf XObject guard rescue')
   })
 
-  it('migrates saved v4 workspaces to schema v6 without dropping missions', () => {
+  it('migrates saved v4 workspaces to schema v7 without dropping missions', () => {
     const workspace = createDefaultWorkspace()
     const savedMission = {
       ...workspace.missions[0],
@@ -55,7 +56,7 @@ describe('storage', () => {
 
     const migrated = loadWorkspace()
 
-    expect(migrated.settings.schemaVersion).toBe(6)
+    expect(migrated.settings.schemaVersion).toBe(7)
     expect(migrated.settings.missionStatusFilter).toBe('all')
     expect(migrated.settings.mobilePanel).toBe('work')
     expect(migrated.settings.showGuidance).toBe(true)
@@ -65,7 +66,7 @@ describe('storage', () => {
     expect(migrated.missions[0].outputs.fieldSources).toEqual({})
   })
 
-  it('repairs an invalid active mission id and persists schema v6', () => {
+  it('repairs an invalid active mission id and persists schema v7', () => {
     const workspace = createDefaultWorkspace()
     window.localStorage.setItem(
       storageKey,
@@ -83,7 +84,7 @@ describe('storage', () => {
     saveWorkspace(repaired)
 
     expect(repaired.activeMissionId).toBe(repaired.missions[0].id)
-    expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '{}').settings.schemaVersion).toBe(6)
+    expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '{}').settings.schemaVersion).toBe(7)
   })
 
   it('serializes and parses workspace JSON imports through the current migration path', () => {
@@ -97,14 +98,14 @@ describe('storage', () => {
     })
     const imported = parseWorkspaceImport(exported)
 
-    expect(imported.settings.schemaVersion).toBe(6)
+    expect(imported.settings.schemaVersion).toBe(7)
     expect(imported.missions[0].title).toBe(workspace.missions[0].title)
   })
 
   it('previews workspace imports before replacement', () => {
     const preview = previewWorkspaceImport(serializeWorkspaceExport(createDefaultWorkspace()))
 
-    expect(preview.schemaVersion).toBe(6)
+    expect(preview.schemaVersion).toBe(7)
     expect(preview.missionCount).toBe(1)
     expect(preview.evidenceCount).toBeGreaterThan(0)
     expect(preview.archivedCount).toBe(0)
@@ -155,11 +156,11 @@ describe('storage', () => {
           ...workspace,
           settings: {
             ...workspace.settings,
-            schemaVersion: 7,
+            schemaVersion: 8,
           },
         }),
       ),
-    ).toThrow(/newer than supported schema 6/i)
+    ).toThrow(/newer than supported schema 7/i)
   })
 
   it('migrates v5 scanner provenance to an open triage state', () => {
@@ -189,13 +190,77 @@ describe('storage', () => {
       }),
     )
 
-    expect(migrated.settings.schemaVersion).toBe(6)
+    expect(migrated.settings.schemaVersion).toBe(7)
     expect(migrated.missions[0].evidence[0].triageStatus).toBe('open')
     expect(migrated.missions[0].evidence[0].provenance?.sourceName).toBe('scan.json')
     expect(migrated.missions[0].evidence[0].provenance?.scanRoot).toBeUndefined()
     expect(migrated.missions[0].evidence[0].filePath).toBeUndefined()
     expect(migrated.missions[0].evidence[0].provenance?.producerStatus).toBe('unverified')
     expect(migrated.missions[0].evidence[0].provenance?.scopeId).toMatch(/^scope-/)
+  })
+
+  it.each([1, 2, 3, 4, 5, 6])(
+    'imports schema v%i through the schema v7 migration path',
+    (schemaVersion) => {
+      const workspace = createDefaultWorkspace()
+      const imported = parseWorkspaceImport(
+        JSON.stringify({
+          ...workspace,
+          settings: {
+            ...workspace.settings,
+            schemaVersion,
+          },
+        }),
+      )
+
+      expect(imported.settings.schemaVersion).toBe(7)
+      expect(imported.missions[0].id).toBe(workspace.missions[0].id)
+      expect(imported.missions[0].evidence).toHaveLength(
+        workspace.missions[0].evidence.length,
+      )
+    },
+  )
+
+  it('keeps a v6 accepted scanner risk but blocks handoff until it has a note', () => {
+    const workspace = createDefaultWorkspace()
+    const mission = workspace.missions[0]
+    const importedAt = '2026-07-26T00:00:00.000Z'
+    const acceptedWithoutNote = {
+      ...mission.evidence[0],
+      id: 'accepted-without-note',
+      severity: 'high' as const,
+      triageStatus: 'accepted' as const,
+      resolutionNote: undefined,
+      provenance: {
+        importer: 'agent-hygiene' as const,
+        format: 'json' as const,
+        sourceName: 'schema-v6.json',
+        toolName: 'agent-hygiene' as const,
+        producerStatus: 'declared' as const,
+        producerVersion: '0.3.0',
+        scanComplete: true,
+        importedAt,
+        scopeId: 'scope-schema-v6',
+        ruleId: 'AH003',
+        fingerprint: '11111111111111111111',
+        findingKey: 'finding-schema-v6',
+      },
+    }
+    const migrated = parseWorkspaceImport(
+      JSON.stringify({
+        ...workspace,
+        missions: [{ ...mission, evidence: [acceptedWithoutNote] }],
+        settings: { ...workspace.settings, schemaVersion: 6 },
+      }),
+    )
+    const accepted = migrated.missions[0].evidence[0]
+
+    expect(migrated.settings.schemaVersion).toBe(7)
+    expect(accepted.triageStatus).toBe('accepted')
+    expect(accepted.resolutionNote).toBeUndefined()
+    expect(getHandoffBlockers(migrated.missions[0])).toContain(
+      '1 accepted scanner risk(s) need a non-empty resolution note',
+    )
   })
 
   it('forces incomplete imported provenance back to open triage', () => {

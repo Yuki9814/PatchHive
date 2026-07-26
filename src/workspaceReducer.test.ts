@@ -301,6 +301,95 @@ describe('workspaceReducer', () => {
     expect(resolvedSummary?.provenance?.scanComplete).toBe(true)
   })
 
+  it('reconciles scanner lane ownership across a same-scope rerun in another stage', () => {
+    const state = createDefaultWorkspace()
+    const mission = state.missions[0]
+    const firstStage = mission.stages[0]
+    const secondStage = mission.stages[1]
+    const baseScan = {
+      format: 'json' as const,
+      sourceName: 'incomplete.json',
+      toolName: 'agent-hygiene' as const,
+      producerStatus: 'declared' as const,
+      producerVersion: '0.3.0',
+      scopeId: 'scope-cross-stage-rerun',
+      score: 40,
+      status: 'blocked',
+      findings: [],
+      discoveryIssues: [],
+      severityCounts: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+    }
+    const incomplete = workspaceReducer(state, {
+      type: 'import-agent-hygiene-scan',
+      missionId: mission.id,
+      stageId: firstStage.id,
+      scan: { ...baseScan, scanComplete: false },
+    })
+    const incompleteSummary = incomplete.missions[0].evidence.find(
+      (evidence) =>
+        evidence.provenance?.scopeId === baseScan.scopeId &&
+        evidence.provenance.ruleId === 'scan/summary',
+    )
+    const complete = workspaceReducer(incomplete, {
+      type: 'import-agent-hygiene-scan',
+      missionId: mission.id,
+      stageId: secondStage.id,
+      scan: {
+        ...baseScan,
+        sourceName: 'complete.json',
+        scanComplete: true,
+        score: 100,
+        status: 'clean',
+      },
+    })
+    const completeMission = complete.missions[0]
+    const completeSummary = completeMission.evidence.find(
+      (evidence) =>
+        evidence.id !== incompleteSummary?.id &&
+        evidence.provenance?.scopeId === baseScan.scopeId &&
+        evidence.provenance.ruleId === 'scan/summary',
+    )
+    const firstReviewLane = completeMission.stages[0].lanes.find(
+      (lane) => lane.id === 'review-agent',
+    )
+    const secondReviewLane = completeMission.stages[1].lanes.find(
+      (lane) => lane.id === 'review-agent',
+    )
+    const assignmentCounts = new Map<string, number>()
+
+    completeMission.stages.forEach((stage) => {
+      stage.lanes.forEach((lane) => {
+        lane.assignedEvidenceIds.forEach((id) => {
+          assignmentCounts.set(id, (assignmentCounts.get(id) ?? 0) + 1)
+        })
+      })
+    })
+
+    expect(incompleteSummary?.id).toBeTruthy()
+    expect(completeSummary?.id).toBeTruthy()
+    expect(
+      completeMission.evidence.find(
+        (evidence) => evidence.id === incompleteSummary?.id,
+      )?.triageStatus,
+    ).toBe('resolved')
+    expect(firstReviewLane?.status).toBe('ready')
+    expect(secondReviewLane?.status).toBe('ready')
+    expect(firstReviewLane?.assignedEvidenceIds).toContain(incompleteSummary?.id)
+    expect(firstReviewLane?.assignedEvidenceIds).not.toContain(completeSummary?.id)
+    expect(secondReviewLane?.assignedEvidenceIds).toContain(completeSummary?.id)
+    expect(secondReviewLane?.assignedEvidenceIds).not.toContain(
+      incompleteSummary?.id,
+    )
+    expect(assignmentCounts.get(incompleteSummary?.id ?? '')).toBe(1)
+    expect(assignmentCounts.get(completeSummary?.id ?? '')).toBe(1)
+  })
+
   it('marks the scanner review lane ready after the final high-severity finding is accepted', () => {
     const state = createDefaultWorkspace()
     const mission = state.missions[0]
@@ -342,17 +431,112 @@ describe('workspaceReducer', () => {
     const scannerEvidence = imported.missions[0].evidence.find(
       (evidence) => evidence.provenance?.fingerprint === '66666666666666666666',
     )
-    const accepted = workspaceReducer(imported, {
-      type: 'update-evidence',
+    const rejectedBlankAcceptance = workspaceReducer(imported, {
+      type: 'set-scanner-triage',
       missionId: mission.id,
       evidenceId: scannerEvidence?.id ?? '',
-      evidence: { triageStatus: 'accepted' },
+      triageStatus: 'accepted',
+      resolutionNote: '   ',
+    })
+    const stillBlockedLane = rejectedBlankAcceptance.missions[0].stages[0].lanes.find(
+      (lane) => lane.id === 'review-agent',
+    )
+    const accepted = workspaceReducer(rejectedBlankAcceptance, {
+      type: 'set-scanner-triage',
+      missionId: mission.id,
+      evidenceId: scannerEvidence?.id ?? '',
+      triageStatus: 'accepted',
+      resolutionNote: 'The maintainer accepts this local-only test fixture risk.',
     })
     const reviewLane = accepted.missions[0].stages[0].lanes.find(
       (lane) => lane.id === 'review-agent',
     )
+    const acceptedEvidence = accepted.missions[0].evidence.find(
+      (evidence) => evidence.id === scannerEvidence?.id,
+    )
 
+    expect(stillBlockedLane?.status).toBe('blocked')
     expect(reviewLane?.status).toBe('ready')
+    expect(acceptedEvidence?.triageStatus).toBe('accepted')
+    expect(acceptedEvidence?.resolutionNote).toBe(
+      'The maintainer accepts this local-only test fixture risk.',
+    )
+  })
+
+  it('preserves an accepted risk note across the same finding rerun and clears it on reopen', () => {
+    const state = createDefaultWorkspace()
+    const mission = state.missions[0]
+    const scan = {
+      format: 'json' as const,
+      sourceName: 'scan.json',
+      toolName: 'agent-hygiene' as const,
+      producerStatus: 'declared' as const,
+      producerVersion: '0.3.0',
+      scanComplete: true,
+      scopeId: 'scope-note-rerun',
+      findings: [
+        {
+          ruleId: 'AH003',
+          title: 'Hard-coded secret',
+          severity: 'high' as const,
+          path: 'AGENTS.md',
+          line: 4,
+          message: 'A literal needs review.',
+          remediation: 'Remove the literal.',
+          fingerprint: '67676767676767676767',
+          findingKey: 'finding-note-rerun',
+        },
+      ],
+      discoveryIssues: [],
+      severityCounts: {
+        critical: 0,
+        high: 1,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+    }
+    const imported = workspaceReducer(state, {
+      type: 'import-agent-hygiene-scan',
+      missionId: mission.id,
+      stageId: mission.activeStageId,
+      scan,
+    })
+    const finding = imported.missions[0].evidence.find(
+      (evidence) => evidence.provenance?.findingKey === scan.findings[0].findingKey,
+    )
+    const accepted = workspaceReducer(imported, {
+      type: 'set-scanner-triage',
+      missionId: mission.id,
+      evidenceId: finding?.id ?? '',
+      triageStatus: 'accepted',
+      resolutionNote: 'Accepted while the generated fixture remains local.',
+    })
+    const rerun = workspaceReducer(accepted, {
+      type: 'import-agent-hygiene-scan',
+      missionId: mission.id,
+      stageId: mission.activeStageId,
+      scan,
+    })
+    const rerunFinding = rerun.missions[0].evidence.find(
+      (evidence) => evidence.id === finding?.id,
+    )
+    const reopened = workspaceReducer(rerun, {
+      type: 'set-scanner-triage',
+      missionId: mission.id,
+      evidenceId: finding?.id ?? '',
+      triageStatus: 'open',
+    })
+    const reopenedFinding = reopened.missions[0].evidence.find(
+      (evidence) => evidence.id === finding?.id,
+    )
+
+    expect(rerunFinding?.triageStatus).toBe('accepted')
+    expect(rerunFinding?.resolutionNote).toBe(
+      'Accepted while the generated fixture remains local.',
+    )
+    expect(reopenedFinding?.triageStatus).toBe('open')
+    expect(reopenedFinding?.resolutionNote).toBeUndefined()
   })
 
   it('does not let an unrelated complete scope resolve an incomplete scan', () => {
@@ -565,6 +749,29 @@ describe('workspaceReducer', () => {
         missionId: mission.id,
         stageId: mission.activeStageId,
         scan: collision,
+      }),
+    ).toEqual(imported)
+
+    const evidenceOnlyCollision = {
+      ...scan,
+      findings: [
+        {
+          ...scan.findings[0],
+          evidence: 'The scanner evidence changed while the fingerprint stayed fixed.',
+          findingKey: 'finding-evidence-changed',
+        },
+      ],
+    }
+
+    expect(
+      getAgentHygieneImportConflict(imported.missions[0], evidenceOnlyCollision),
+    ).toMatch(/fingerprint collision/i)
+    expect(
+      workspaceReducer(imported, {
+        type: 'import-agent-hygiene-scan',
+        missionId: mission.id,
+        stageId: mission.activeStageId,
+        scan: evidenceOnlyCollision,
       }),
     ).toEqual(imported)
   })

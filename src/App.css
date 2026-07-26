@@ -707,6 +707,42 @@ textarea {
 .evidence-item {
   display: grid;
   gap: 7px;
+  content-visibility: auto;
+  contain-intrinsic-size: 220px;
+}
+
+.resolution-note {
+  border-left: 3px solid #2563eb;
+  padding-left: 8px;
+}
+
+.resolution-note--missing {
+  border-left-color: #b91c1c;
+  color: #991b1b !important;
+  font-weight: 700;
+}
+
+.resolution-editor {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.resolution-editor label,
+.resolution-editor textarea {
+  width: 100%;
+}
+
+.evidence-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--color-muted);
+  font-size: 0.8rem;
 }
 
 .topbar p,

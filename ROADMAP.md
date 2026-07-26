@@ -14,14 +14,17 @@ not promised before the preceding acceptance gate is met.
 
 ## v0.3 — maintainer-scale triage
 
-- [ ] add deterministic sorting and compact filtering for large scan imports
-- [ ] add a resolution note and follow-up evidence requirement for closed risks
-- [ ] export a scanner-triage appendix with accepted-risk ownership
-- [ ] publish documented performance measurements at the 250-finding limit
+- [x] add deterministic sorting, severity/triage filters, and 25-item pagination
+- [x] require a non-empty resolution note for accepted scanner risks
+- [ ] require follow-up evidence for manually resolved scanner risks
+- [x] export a scanner-triage appendix with accepted-risk rationale
+- [x] publish documented performance measurements at the 250-finding limit
 - [ ] test two additional evergreen browsers
+- [ ] complete an external maintainer workflow trial (`N=0`, not accepted)
 
-Acceptance gate: zero high-severity dependency advisories, successful v1-v6
-migration fixtures, and measured import/render behavior at the supported limit.
+Acceptance gate: zero high-severity dependency advisories, successful v1-v6 to
+v7 migration fixtures, measured import/render behavior at the supported limit,
+and no external usability claim before real trial evidence exists.
 
 ## v0.4 — contribution handoff quality
 

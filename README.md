@@ -19,7 +19,7 @@ PatchHive is intentionally local-first:
 
 ## Scanner-to-maintainer workflow
 
-PatchHive v0.2 accepts native JSON and SARIF 2.1.0 produced by
+PatchHive v0.3 accepts native JSON and SARIF 2.1.0 produced by
 [agent-hygiene](https://github.com/Yuki9814/agent-hygiene). The complete file is
 parsed in the browser and is not uploaded.
 
@@ -35,9 +35,10 @@ In PatchHive:
 2. Paste the output or choose the local file.
 3. Review the preview. Nothing enters the workspace before confirmation.
 4. Import normalized findings into the current stage.
-5. Triage high-severity findings, attach follow-up evidence, and complete the
-   human approval gates.
-6. Copy or download the evidence-backed Markdown handoff.
+5. Triage high-severity findings. Accepted risks require a non-empty resolution
+   note; the note survives reload and is included safely in the handoff.
+6. Attach follow-up evidence and complete the human approval gates.
+7. Copy or download the evidence-backed Markdown handoff.
 
 Imported findings keep their format, source filename, declared-or-unverified
 producer status, rule ID, fingerprint, normalized identity, scan-completion
@@ -59,10 +60,12 @@ SARIF source filenames remain compatibility fallbacks only.
 - local parsing of GitHub issue and pull-request URLs without a network request
 - local agent-hygiene JSON/SARIF preview with byte, count, shape, path, and field limits
 - evidence provenance and open/accepted/resolved triage states
+- deterministic severity-first sorting, severity/triage filters, and 25-item pagination
+- fail-closed accepted-risk notes plus an accepted-risk handoff appendix
 - stages, structured maintainer lanes, findings, and human approval gates
 - handoff readiness checks and evidence-source coverage
 - Markdown copy/download plus versioned workspace import/export
-- schema v1-v5 migration to schema v6 without changing the browser key
+- schema v1-v6 migration to schema v7 without changing the browser key
 - responsive desktop/mobile workflow and keyboard-accessible controls
 
 Agent lanes are structured planning surfaces, not autonomous agents. External
@@ -82,6 +85,7 @@ Scanner and workspace files are untrusted input. PatchHive:
 - rejects future workspace schemas instead of guessing a downgrade
 - repairs dangling workspace references, rejects duplicate critical IDs, and
   reopens incomplete imported provenance
+- blocks handoff when an accepted scanner risk lacks a non-empty resolution note
 - neutralizes imported mentions, issue references, and automatic links in Markdown
 - ships a production CSP with network connections disabled and uses no runtime
   dependencies beyond React
@@ -104,29 +108,37 @@ Run the complete release gate:
 npm run check
 npx playwright install chromium
 npm run test:e2e
+npm run benchmark:scanner
 ```
 
 `npm run check` runs lint, unit/component tests, the production build, a GitHub
 Pages asset-path smoke test, and a full high-severity dependency audit.
+`npm run benchmark:scanner` runs the reproducible JSON/SARIF 25, 100, and
+250-finding production benchmark. See the
+[v0.3.0 benchmark report](docs/benchmarks/v0.3.0-scanner-intake.md).
 
 ## Repository map
 
 - `src/agentHygieneImport.ts` — bounded JSON/SARIF normalization
 - `src/storage.ts` — workspace validation and schema migration
 - `src/workspaceReducer.ts` — mission state transitions and scanner intake
+- `src/evidenceView.ts` — deterministic evidence filtering and sorting
 - `src/handoff.ts` — approval, scanner, and evidence export gates
+- `scripts/scanner-benchmark.mjs` — reproducible scanner-scale benchmark
 - `e2e/patchhive.spec.ts` — browser-level maintainer workflows
 - `.github/workflows/pages.yml` — production Pages artifact deployment
 - `.github/workflows/release.yml` — verified Pages archive and checksum release
 
 ## Project status
 
-v0.2 is a maintained preview. Current constraints are deliberate:
+v0.3 is a maintained preview. Current constraints are deliberate:
 
 - no remote repository fetch or authenticated GitHub integration
 - no cross-device sync
 - Markdown is the only maintainer-facing export
 - scanner imports support agent-hygiene, not arbitrary SARIF producers
+- external maintainer trial evidence remains `N=0`; no adoption, completion-rate,
+  or usability claim has been accepted
 
 See [ROADMAP.md](ROADMAP.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
 [MAINTAINERS.md](MAINTAINERS.md) for planned work and ownership.

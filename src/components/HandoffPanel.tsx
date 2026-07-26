@@ -1,5 +1,6 @@
 import type { HandoffDraft, Mission } from '../types'
 import { handoffFieldLabels } from '../workspaceUi'
+import { useState } from 'react'
 
 type FieldStatusMap = Record<
   string,
@@ -30,6 +31,8 @@ export function HandoffPanel({
   onCopyHandoff,
   onDownloadHandoff,
 }: HandoffPanelProps) {
+  const [previewOpen, setPreviewOpen] = useState(false)
+
   return (
     <section className="inspector-panel handoff-panel" id="panel-handoff">
       <div className="panel-title">
@@ -90,9 +93,13 @@ export function HandoffPanel({
           Download
         </button>
       </div>
-      <details className="handoff-preview" open>
+      <details
+        className="handoff-preview"
+        open={previewOpen}
+        onToggle={(event) => setPreviewOpen(event.currentTarget.open)}
+      >
         <summary>Markdown preview</summary>
-        <pre>{handoffMarkdown}</pre>
+        {previewOpen ? <pre>{handoffMarkdown}</pre> : null}
       </details>
     </section>
   )
