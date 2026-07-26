@@ -43,13 +43,16 @@ export function getHandoffFieldStatuses(mission: Mission): HandoffFieldStatus[] 
   }))
 }
 
-export function getMissionHealth(mission: Mission): MissionHealth {
+export function getMissionHealth(
+  mission: Mission,
+  knownBlockers?: string[],
+): MissionHealth {
   const stage = mission.stages.find((item) => item.id === mission.activeStageId) ?? mission.stages[0]
   const unlinkedEvidenceCount = mission.evidence.filter((item) => !item.stageId && !item.agentId).length
   const pendingApprovalCount = mission.approvals.filter((approval) => !approval.approved).length
   const missingHandoffCount = getHandoffFieldStatuses(mission).filter((field) => !field.complete).length
   const handoffCoverage = getHandoffEvidenceCoverage(mission)
-  const blockers = getHandoffBlockers(mission)
+  const blockers = knownBlockers ?? getHandoffBlockers(mission)
 
   const completedChecks = [
     mission.evidence.length > 0,

@@ -41,6 +41,7 @@ For scanner imports, preserve these invariants:
 - imported text is never sent to an HTML sink
 - imported Markdown cannot trigger mentions or automatic links
 - incomplete scans remain visible blockers
+- accepted scanner risks require a non-empty, bounded resolution note
 - a complete rerun supersedes only evidence from the same scan scope
 - imported scanner content never writes a ready-to-publish maintainer comment
 

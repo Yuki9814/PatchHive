@@ -29,12 +29,14 @@ Workspace and scanner files are untrusted input:
 - absolute or traversing finding paths are rejected
 - fingerprint collisions fail closed and reruns supersede only the same opaque scope
 - imported scanner facts stay immutable apart from their explicit triage state
+- accepted scanner risks require a bounded, non-empty resolution note; imported
+  workspaces with missing notes remain blocked
 - normalized fields render as React text, not injected HTML
 - imported Markdown cannot create automatic mentions, issue links, or external links
 - evidence links allow only credential-free HTTP(S)
-- incomplete workspace provenance is reopened and cannot be deleted through reducer actions
+- unresolved workspace provenance cannot be deleted through reducer actions
 - dangling workspace references are repaired and critical duplicate IDs are rejected
-- incomplete scans cannot silently become a ready handoff
+- incomplete scans and undocumented accepted risks cannot silently become a ready handoff
 
 The production content security policy disables all network connections; local
 development permits only the Vite loopback WebSocket used for hot reload.

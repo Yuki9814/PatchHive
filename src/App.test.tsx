@@ -121,6 +121,21 @@ describe('App workflow', () => {
     await user.click(
       within(importedCard as HTMLElement).getByRole('button', { name: /accept risk/i }),
     )
+    const confirmAcceptance = within(importedCard as HTMLElement).getByRole(
+      'button',
+      { name: /confirm acceptance/i },
+    )
+
+    expect(confirmAcceptance).toBeDisabled()
+    await user.type(
+      within(importedCard as HTMLElement).getByLabelText(/acceptance resolution note/i),
+      'Accepted because this fixture is local and contains no live credential.',
+    )
+    await user.click(confirmAcceptance)
+
     expect(screen.queryByText(/1 high-severity imported finding/i)).not.toBeInTheDocument()
+    expect(
+      within(importedCard as HTMLElement).getByText(/acceptance note:/i),
+    ).toHaveTextContent(/fixture is local/i)
   })
 })

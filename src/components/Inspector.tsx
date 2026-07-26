@@ -1,4 +1,8 @@
 import type { EvidenceTriageStatus, HandoffDraft, Mission, MissionStage } from '../types'
+import type {
+  EvidenceSeverityFilter,
+  EvidenceTriageFilter,
+} from '../evidenceView'
 import type { EvidenceFilter, EvidenceForm } from '../workspaceUi'
 import type { WorkspaceAction } from '../workspaceReducer'
 import { ApprovalsPanel } from './ApprovalsPanel'
@@ -27,12 +31,16 @@ type InspectorProps = {
   evidenceFilter: EvidenceFilter
   evidenceStageFilter: string
   evidenceAgentFilter: string
+  evidenceSeverityFilter: EvidenceSeverityFilter
+  evidenceTriageFilter: EvidenceTriageFilter
   filteredEvidence: Mission['evidence']
   unlinkedEvidenceCount: number
   onEvidenceFormChange: (form: EvidenceForm) => void
   onEvidenceFilterChange: (value: EvidenceFilter) => void
   onEvidenceStageFilterChange: (value: string) => void
   onEvidenceAgentFilterChange: (value: string) => void
+  onEvidenceSeverityFilterChange: (value: EvidenceSeverityFilter) => void
+  onEvidenceTriageFilterChange: (value: EvidenceTriageFilter) => void
   onSubmitEvidence: (event: FormEvent<HTMLFormElement>) => void
   onStartEvidenceEdit: (evidenceId: string) => void
   onCancelEvidenceEdit: () => void
@@ -55,12 +63,16 @@ export function Inspector({
   evidenceFilter,
   evidenceStageFilter,
   evidenceAgentFilter,
+  evidenceSeverityFilter,
+  evidenceTriageFilter,
   filteredEvidence,
   unlinkedEvidenceCount,
   onEvidenceFormChange,
   onEvidenceFilterChange,
   onEvidenceStageFilterChange,
   onEvidenceAgentFilterChange,
+  onEvidenceSeverityFilterChange,
+  onEvidenceTriageFilterChange,
   onSubmitEvidence,
   onStartEvidenceEdit,
   onCancelEvidenceEdit,
@@ -77,12 +89,17 @@ export function Inspector({
       output,
     })
 
-  const setEvidenceTriage = (evidenceId: string, triageStatus: EvidenceTriageStatus) =>
+  const setEvidenceTriage = (
+    evidenceId: string,
+    triageStatus: EvidenceTriageStatus,
+    resolutionNote?: string,
+  ) =>
     dispatch({
-      type: 'update-evidence',
+      type: 'set-scanner-triage',
       missionId: mission.id,
       evidenceId,
-      evidence: { triageStatus },
+      triageStatus,
+      resolutionNote,
     })
 
   return (
@@ -95,12 +112,15 @@ export function Inspector({
       />
 
       <EvidencePanel
+        key={mission.id}
         activeStage={activeStage}
         editingEvidenceId={editingEvidenceId}
         evidenceAgentFilter={evidenceAgentFilter}
         evidenceFilter={evidenceFilter}
         evidenceForm={evidenceForm}
+        evidenceSeverityFilter={evidenceSeverityFilter}
         evidenceStageFilter={evidenceStageFilter}
+        evidenceTriageFilter={evidenceTriageFilter}
         filteredEvidence={filteredEvidence}
         mission={mission}
         onCancelEvidenceEdit={onCancelEvidenceEdit}
@@ -108,7 +128,9 @@ export function Inspector({
         onEvidenceAgentFilterChange={onEvidenceAgentFilterChange}
         onEvidenceFilterChange={onEvidenceFilterChange}
         onEvidenceFormChange={onEvidenceFormChange}
+        onEvidenceSeverityFilterChange={onEvidenceSeverityFilterChange}
         onEvidenceStageFilterChange={onEvidenceStageFilterChange}
+        onEvidenceTriageFilterChange={onEvidenceTriageFilterChange}
         onStartEvidenceEdit={onStartEvidenceEdit}
         onSubmitEvidence={onSubmitEvidence}
         onSetEvidenceTriage={setEvidenceTriage}

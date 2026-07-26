@@ -204,6 +204,17 @@ function normalizeSeverity(value: unknown, label: string): ScanSeverity {
   return value as ScanSeverity
 }
 
+function normalizeFindingRuleId(value: unknown, label: string) {
+  const ruleId = boundedString(value, label, MAX_RULE_ID_LENGTH)
+  const normalized = ruleId.toLowerCase()
+
+  if (normalized === 'scan/summary' || normalized.startsWith('discovery/')) {
+    throw new Error(`${label} uses a rule id reserved for PatchHive scanner records.`)
+  }
+
+  return ruleId
+}
+
 function emptySeverityCounts(): Record<ScanSeverity, number> {
   return {
     critical: 0,
@@ -274,7 +285,7 @@ function parseJsonFinding(
   }
 
   return {
-    ruleId: boundedString(value.rule_id, `Finding ${index + 1} rule_id`, MAX_RULE_ID_LENGTH),
+    ruleId: normalizeFindingRuleId(value.rule_id, `Finding ${index + 1} rule_id`),
     title: boundedString(value.title, `Finding ${index + 1} title`, MAX_TITLE_LENGTH),
     severity: normalizeSeverity(value.severity, `Finding ${index + 1} severity`),
     path: normalizePath(value.path, `Finding ${index + 1} path`),
@@ -646,10 +657,9 @@ function parseSarif(parsed: UnknownRecord, sourceName: string): AgentHygieneScan
         throw new Error(`SARIF result ${resultIndex + 1} must be an object.`)
       }
 
-      const ruleId = boundedString(
+      const ruleId = normalizeFindingRuleId(
         result.ruleId,
         `SARIF result ${resultIndex + 1} ruleId`,
-        MAX_RULE_ID_LENGTH,
       )
       const messageParts = splitSarifMessage(getSarifMessage(result, resultIndex))
       const location = getSarifLocation(result, resultIndex)

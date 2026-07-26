@@ -1,6 +1,11 @@
 import { getHandoffEvidenceCoverage, getHandoffFieldSourceIds, handoffEvidenceTargets } from './handoffCoverage'
 import { neutralizeUntrustedMarkdown } from './safeMarkdown'
 import { normalizeExternalUrl } from './safeUrl'
+import {
+  isAcceptedScannerRiskMissingResolution,
+  isScannerRiskEvidence,
+  normalizeResolutionNote,
+} from './scannerTriage'
 import type { ApprovalGate, EvidenceItem, Mission, MissionStage } from './types'
 
 function listItems(items: string[]) {
@@ -26,7 +31,12 @@ function evidenceLine(item: EvidenceItem) {
   const provenance = item.provenance
     ? `; imported from ${item.provenance.toolName} ${item.provenance.format.toUpperCase()} (${neutralizeUntrustedMarkdown(item.provenance.sourceName)}; producer ${item.provenance.producerStatus ?? 'unverified'})`
     : ''
-  return `- [${item.kind}${severity}] ${display(item.title)}: ${display(item.detail)}${source}${provenance}`
+  const resolutionNote = normalizeResolutionNote(item.resolutionNote)
+  const resolution =
+    item.triageStatus === 'accepted' && resolutionNote
+      ? `; acceptance note: ${neutralizeUntrustedMarkdown(resolutionNote)}`
+      : ''
+  return `- [${item.kind}${severity}] ${display(item.title)}: ${display(item.detail)}${source}${provenance}${resolution}`
 }
 
 function approvalLine(item: ApprovalGate) {
@@ -70,6 +80,7 @@ function getPendingApprovalBlockers(mission: Mission) {
 function getImportedScanBlockers(mission: Mission) {
   const incompleteImports = new Map<string, string>()
   let openHighSeverity = 0
+  let acceptedWithoutResolution = 0
 
   mission.evidence.forEach((evidence) => {
     if (!evidence.provenance || evidence.triageStatus === 'resolved') {
@@ -82,6 +93,10 @@ function getImportedScanBlockers(mission: Mission) {
           `${evidence.provenance.sourceName}:${evidence.provenance.importedAt}`,
         evidence.provenance.sourceName,
       )
+    }
+
+    if (isAcceptedScannerRiskMissingResolution(evidence)) {
+      acceptedWithoutResolution += 1
     }
 
     if (
@@ -100,7 +115,29 @@ function getImportedScanBlockers(mission: Mission) {
     ...(openHighSeverity > 0
       ? [`${openHighSeverity} high-severity imported finding(s) still need triage`]
       : []),
+    ...(acceptedWithoutResolution > 0
+      ? [
+          `${acceptedWithoutResolution} accepted scanner risk(s) need a non-empty resolution note`,
+        ]
+      : []),
   ]
+}
+
+function acceptedScannerRiskLine(evidence: EvidenceItem) {
+  const note = normalizeResolutionNote(evidence.resolutionNote)
+
+  return `- ${neutralizeUntrustedMarkdown(evidence.title)} (${evidence.severity ?? 'info'}): ${neutralizeUntrustedMarkdown(note ?? 'Missing resolution note')}`
+}
+
+function acceptedScannerRisks(mission: Mission) {
+  const risks = mission.evidence
+    .filter(
+      (evidence) =>
+        isScannerRiskEvidence(evidence) && evidence.triageStatus === 'accepted',
+    )
+    .map(acceptedScannerRiskLine)
+
+  return risks.length > 0 ? risks.join('\n') : '- None recorded'
 }
 
 export function getStageGateBlocker(mission: Mission, targetStageId: string) {
@@ -183,6 +220,10 @@ ${mission.stages.map(stageLine).join('\n')}
 ## Evidence
 
 ${mission.evidence.length > 0 ? mission.evidence.map(evidenceLine).join('\n') : '- No evidence attached yet'}
+
+## Accepted Scanner Risks
+
+${acceptedScannerRisks(mission)}
 
 ## Handoff Evidence Sources
 

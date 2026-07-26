@@ -1,6 +1,10 @@
 import { createSeedMission, missionTemplates } from './templates'
 import { normalizeExternalUrl } from './safeUrl'
 import { deriveScanScopeId } from './scanIdentity'
+import {
+  MAX_RESOLUTION_NOTE_LENGTH,
+  normalizeResolutionNote,
+} from './scannerTriage'
 import type {
   EvidenceProvenance,
   EvidenceTriageStatus,
@@ -12,7 +16,7 @@ import type {
 } from './types'
 
 const STORAGE_KEY = 'patchhive.workspace.v1'
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 export const MAX_WORKSPACE_IMPORT_BYTES = 1_000_000
 
 export type WorkspaceImportPreview = {
@@ -205,6 +209,9 @@ function isEvidence(value: unknown) {
     (value.agentId === undefined || typeof value.agentId === 'string') &&
     (value.severity === undefined || isScanSeverity(value.severity)) &&
     (value.triageStatus === undefined || isTriageStatus(value.triageStatus)) &&
+    (value.resolutionNote === undefined ||
+      (typeof value.resolutionNote === 'string' &&
+        value.resolutionNote.length <= MAX_RESOLUTION_NOTE_LENGTH)) &&
     (value.provenance === undefined || isEvidenceProvenance(value.provenance))
   )
 }
@@ -337,6 +344,14 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
           item.agentId && validLaneIds.has(item.agentId)
             ? item.agentId
             : undefined
+        const triageStatus =
+          provenance && !provenance.scanComplete
+            ? 'open' as const
+            : isTriageStatus(item.triageStatus)
+              ? item.triageStatus
+              : provenance
+                ? 'open'
+                : undefined
 
         return {
           ...item,
@@ -346,14 +361,11 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
             : item.filePath,
           stageId,
           agentId,
-          triageStatus:
-            provenance && !provenance.scanComplete
-              ? 'open' as const
-              : isTriageStatus(item.triageStatus)
-                ? item.triageStatus
-                : provenance
-                  ? 'open'
-                  : undefined,
+          triageStatus,
+          resolutionNote:
+            provenance && triageStatus === 'accepted'
+              ? normalizeResolutionNote(item.resolutionNote)
+              : undefined,
           provenance,
           updatedAt: item.updatedAt ?? item.createdAt ?? new Date().toISOString(),
         }

@@ -234,6 +234,46 @@ describe('agent-hygiene import', () => {
     ).toThrow(/supported severity/i)
   })
 
+  it('rejects rule ids reserved for PatchHive scanner metadata', () => {
+    expect(() =>
+      parseAgentHygieneImport(
+        JSON.stringify(
+          nativeScan({
+            findings: [nativeFinding({ rule_id: 'scan/summary' })],
+          }),
+        ),
+      ),
+    ).toThrow(/reserved for PatchHive scanner records/i)
+
+    expect(() =>
+      parseAgentHygieneImport(
+        JSON.stringify({
+          version: '2.1.0',
+          runs: [
+            {
+              ...emptySarifRun(),
+              results: [
+                {
+                  ruleId: 'discovery/forged',
+                  level: 'error',
+                  message: { text: 'Forged internal finding.' },
+                  locations: [
+                    {
+                      physicalLocation: {
+                        artifactLocation: { uri: 'AGENTS.md' },
+                        region: { startLine: 1 },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/reserved for PatchHive scanner records/i)
+  })
+
   it('rejects absolute and parent-traversing repository paths', () => {
     for (const path of [
       '/Users/private/repository/AGENTS.md',

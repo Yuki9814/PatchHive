@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.0 - 2026-07-26
+
+- Require a non-empty resolution note before an imported scanner risk can enter
+  the accepted state, enforce the rule in UI, reducer, workspace migration, and
+  handoff gates, and neutralize note Markdown during export.
+- Migrate workspace schemas v1-v6 to schema v7 while preserving accepted v6
+  risks without inventing notes; those records remain blocked until documented.
+- Add deterministic severity-first evidence sorting, severity and triage
+  filters, 25-item pagination, indexed list lookups, memoized derived state, and
+  lazy Markdown preview rendering.
+- Add reproducible JSON/SARIF fixtures and production benchmarks at 25, 100,
+  and 250 findings with p50/p95 timing and Chromium heap observations.
+- Expand Chromium E2E coverage with a 250-finding CI smoke, acceptance-note
+  reload, and mismatched-scope incomplete-scan blocking.
+- Record external maintainer trial status honestly as `N=0, not accepted`; no
+  usability, completion-rate, adoption, or ecosystem claim is made.
+
 ## 0.2.0 - 2026-07-26
 
 - Add bounded local import and preview for agent-hygiene JSON, schema v1 JSON,

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { createSarifScan } from '../scripts/generate-scan-fixtures.mjs'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -119,4 +120,114 @@ test('previews and imports an agent-hygiene SARIF file without interpreting find
   await expect(importedCard).toContainText('<img src=x onerror=alert(1)>')
   await expect(page.locator('img[src="x"]')).toHaveCount(0)
   await expect(page.getByText(/1 high-severity imported finding/)).toBeVisible()
+})
+
+test('handles a deterministic 250-finding scan with filters, acceptance notes, and reload', async ({
+  page,
+}) => {
+  const initialTotal = Number(
+    await page.locator('.evidence-list').getAttribute('data-evidence-total'),
+  )
+  const expectedTotal = initialTotal + 251
+
+  await page.getByLabel('Import agent-hygiene scan').setInputFiles({
+    name: 'agent-hygiene-250.sarif',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(createSarifScan(250))),
+  })
+  await expect(page.getByLabel('agent-hygiene import preview')).toContainText(
+    'SARIF · 250 findings · complete',
+  )
+  await page.getByRole('button', { name: 'Import into current stage' }).click()
+
+  await expect(page.locator('.evidence-list')).toHaveAttribute(
+    'data-evidence-total',
+    String(expectedTotal),
+  )
+  await expect(page.getByText(`Showing 1-25 of ${expectedTotal}`)).toBeVisible()
+
+  await page.getByLabel('Severity filter').selectOption('high')
+  await expect(page.locator('.evidence-list')).toHaveAttribute(
+    'data-evidence-total',
+    '1',
+  )
+
+  await page.getByRole('button', { name: 'Accept risk' }).click()
+  const confirmAcceptance = page.getByRole('button', {
+    name: 'Confirm acceptance',
+  })
+  await expect(confirmAcceptance).toBeDisabled()
+  await page
+    .getByLabel(/Resolution note for/)
+    .fill('Accepted because the deterministic fixture remains local.')
+  await confirmAcceptance.click()
+  await expect(page.getByText(/Acceptance note: Accepted because/)).toBeVisible()
+  await expect(
+    page.getByText(/high-severity imported finding.*still need triage/i),
+  ).toHaveCount(0)
+
+  await page.reload()
+  await expect(page.locator('.evidence-list')).toHaveAttribute(
+    'data-evidence-total',
+    String(expectedTotal),
+  )
+  await expect(page.getByText(/Acceptance note: Accepted because/)).toBeVisible()
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const raw = window.localStorage.getItem('patchhive.workspace.v1')
+        return raw ? JSON.parse(raw).settings.schemaVersion : 0
+      }),
+    )
+    .toBe(7)
+})
+
+test('keeps an incomplete scan blocked after an unrelated complete scope import and reload', async ({
+  page,
+}) => {
+  const incomplete = {
+    schema_version: 1,
+    tool: { name: 'agent-hygiene', version: '0.3.0' },
+    summary: {
+      scope_fingerprint: 'aaaaaaaaaaaaaaaaaaaa',
+      complete: false,
+      score: 40,
+      status: 'blocked',
+      discovery_issues: [],
+    },
+    findings: [],
+  }
+  const unrelatedComplete = {
+    ...incomplete,
+    summary: {
+      ...incomplete.summary,
+      scope_fingerprint: 'bbbbbbbbbbbbbbbbbbbb',
+      complete: true,
+      score: 100,
+      status: 'clean',
+    },
+  }
+
+  await page.getByLabel('Import agent-hygiene scan').setInputFiles({
+    name: 'incomplete-a.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(incomplete)),
+  })
+  await page.getByRole('button', { name: 'Import into current stage' }).click()
+
+  await page.getByLabel('Import agent-hygiene scan').setInputFiles({
+    name: 'complete-b.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(unrelatedComplete)),
+  })
+  await page.getByRole('button', { name: 'Import into current stage' }).click()
+
+  await expect(
+    page.getByText(/Imported scan incomplete-a.json is incomplete/i),
+  ).toBeVisible()
+  await page.reload()
+  await expect(
+    page.getByText(/Imported scan incomplete-a.json is incomplete/i),
+  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeDisabled()
 })
