@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.0 - 2026-07-27
+
+- Remove manual resolution for imported scanner findings. A finding now enters
+  `resolved` only when a complete rerun with the same opaque scope no longer
+  contains its normalized identity.
+- Add explicit `complete-rerun` provenance and declared source revisions to the
+  workspace, UI, and Markdown handoff while retaining the original finding
+  source separately from the resolving rerun.
+- Migrate workspace schemas v1-v7 to schema v8. Legacy or forged resolved
+  scanner findings without rerun provenance reopen instead of silently
+  unblocking handoff.
+- Accept agent-hygiene v0.5 portable Action JSON and publish a byte-pinned
+  finding/clean-rerun fixture pair with exact cross-project SHA-256 checks.
+- Add an in-product command path from the agent-hygiene CLI or Action artifact
+  to local scanner preview without adding network access or dependencies.
+- Keep imported scanner evidence immutable after resolution so the local
+  handoff cannot silently discard its finding history.
+- Restore Vite development styles with a development-only CSP exception while
+  keeping the production Pages policy at `style-src 'self'` and
+  `connect-src 'none'`.
+- Keep external maintainer trial status at `N=0 / not evaluated`; the fixture
+  pair is interoperability evidence, not adoption or independent validation.
+
 ## 0.3.0 - 2026-07-26
 
 - Require a non-empty resolution note before an imported scanner risk can enter

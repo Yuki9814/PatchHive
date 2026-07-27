@@ -7,6 +7,7 @@ import {
 import {
   MAX_RESOLUTION_NOTE_LENGTH,
   isScannerRiskEvidence,
+  isScannerRiskResolvedByRerun,
   normalizeResolutionNote,
 } from '../scannerTriage'
 import {
@@ -372,6 +373,9 @@ export function EvidencePanel({
                   Imported from {evidence.provenance.toolName} {evidence.provenance.format.toUpperCase()} ·{' '}
                   {evidence.provenance.sourceName} · producer{' '}
                   {evidence.provenance.producerStatus ?? 'unverified'} ·{' '}
+                  {evidence.provenance.sourceRevision
+                    ? `revision ${evidence.provenance.sourceRevision.slice(0, 12)} · `
+                    : ''}
                   {evidence.severity ?? 'info'} / {evidence.triageStatus ?? 'open'}
                 </small>
               ) : null}
@@ -383,6 +387,23 @@ export function EvidencePanel({
                     Missing required acceptance note.
                   </p>
                 )
+              ) : null}
+              {isScannerRiskResolvedByRerun(evidence) ? (
+                <p className="resolution-note">
+                  Resolved by complete same-scope rerun{' '}
+                  {evidence.provenance?.resolution?.sourceName}
+                  {evidence.provenance?.resolution?.sourceRevision
+                    ? ` at revision ${evidence.provenance.resolution.sourceRevision.slice(0, 12)}`
+                    : ''}
+                  .
+                </p>
+              ) : null}
+              {scannerRisk &&
+              evidence.triageStatus === 'open' &&
+              evidence.provenance?.scanComplete ? (
+                <p className="resolution-note">
+                  Fixed findings resolve only after a complete rerun of this scan scope.
+                </p>
               ) : null}
               <small>Updated {evidence.updatedAt}</small>
               {acceptingEvidenceId === evidence.id ? (
@@ -428,13 +449,6 @@ export function EvidencePanel({
                     >
                       Accept risk
                     </button>
-                    <button
-                      className="subtle-button"
-                      type="button"
-                      onClick={() => onSetEvidenceTriage(evidence.id, 'resolved')}
-                    >
-                      Mark resolved
-                    </button>
                   </>
                 ) : null}
                 {scannerRisk &&
@@ -466,10 +480,10 @@ export function EvidencePanel({
                 ) : null}
                 <button
                   className="subtle-button subtle-button--danger"
-                  disabled={Boolean(evidence.provenance && evidence.triageStatus !== 'resolved')}
+                  disabled={Boolean(evidence.provenance)}
                   title={
-                    evidence.provenance && evidence.triageStatus !== 'resolved'
-                      ? 'Imported scanner evidence stays locked until it is resolved.'
+                    evidence.provenance
+                      ? 'Imported scanner evidence remains immutable.'
                       : undefined
                   }
                   type="button"

@@ -42,8 +42,14 @@ For scanner imports, preserve these invariants:
 - imported Markdown cannot trigger mentions or automatic links
 - incomplete scans remain visible blockers
 - accepted scanner risks require a non-empty, bounded resolution note
+- scanner findings enter `resolved` only after a complete same-scope rerun no longer reports them
+- source revisions remain bounded declarations and are never presented as signatures
 - a complete rerun supersedes only evidence from the same scan scope
 - imported scanner content never writes a ready-to-publish maintainer comment
+
+Changes to the agent-hygiene contract must update the byte-pinned files under
+`fixtures/agent-hygiene/`, their SHA-256 assertions, and the complete-rerun
+reducer test. Synthetic fixtures are not external trial evidence.
 
 Do not add a backend, OAuth, remote posting, analytics, or model execution
 without first opening a proposal that changes the documented product boundary.

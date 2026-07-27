@@ -251,6 +251,7 @@ describe('workspaceReducer', () => {
 
     expect(resolvedCritical?.triageStatus).toBe('resolved')
     expect(resolvedCritical?.provenance?.scanComplete).toBe(true)
+    expect(resolvedCritical?.provenance?.resolution?.method).toBe('complete-rerun')
   })
 
   it('resolves incomplete scan provenance only after a complete rerun is imported', () => {

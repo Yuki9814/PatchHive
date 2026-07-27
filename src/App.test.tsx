@@ -15,10 +15,12 @@ describe('App workflow', () => {
 
     await user.click(screen.getByRole('button', { name: /new mission/i }))
     await user.selectOptions(screen.getByLabelText(/source type/i), 'diff-paste')
-    await user.clear(screen.getByLabelText(/^source$/i))
-    await user.type(screen.getByLabelText(/^source$/i), 'diff --git a/src/a.ts b/src/a.ts')
-    await user.clear(screen.getByLabelText(/^title$/i))
-    await user.type(screen.getByLabelText(/^title$/i), 'Parser patch rescue')
+    fireEvent.change(screen.getByLabelText(/^source$/i), {
+      target: { value: 'diff --git a/src/a.ts b/src/a.ts' },
+    })
+    fireEvent.change(screen.getByLabelText(/^title$/i), {
+      target: { value: 'Parser patch rescue' },
+    })
     await user.click(screen.getByRole('button', { name: /start mission/i }))
 
     expect(screen.getByRole('heading', { name: 'Parser patch rescue' })).toBeInTheDocument()
@@ -34,8 +36,12 @@ describe('App workflow', () => {
     const evidencePanel = screen.getByLabelText(/evidence, approvals, and handoff/i)
     await user.selectOptions(within(evidencePanel).getByLabelText(/^stage$/i), 'patch-plan')
     await user.selectOptions(within(evidencePanel).getByLabelText(/^agent$/i), 'patch-agent')
-    await user.type(within(evidencePanel).getByPlaceholderText(/evidence title/i), 'Regression proof')
-    await user.type(within(evidencePanel).getByPlaceholderText(/what this proves/i), 'Test plan covers the failing parser path.')
+    fireEvent.change(within(evidencePanel).getByPlaceholderText(/evidence title/i), {
+      target: { value: 'Regression proof' },
+    })
+    fireEvent.change(within(evidencePanel).getByPlaceholderText(/what this proves/i), {
+      target: { value: 'Test plan covers the failing parser path.' },
+    })
     await user.click(within(evidencePanel).getByRole('button', { name: /attach evidence/i }))
 
     expect(screen.getByText(/all evidence is linked/i)).toBeInTheDocument()
@@ -77,9 +83,10 @@ describe('App workflow', () => {
     render(<App />)
     const scanJson = JSON.stringify({
       schema_version: 1,
-      tool: { name: 'agent-hygiene', version: '0.3.0' },
+      tool: { name: 'agent-hygiene', version: '0.5.0' },
       summary: {
         root: '/Users/private/repository',
+        source_revision: '1111111111111111111111111111111111111111',
         complete: true,
         score: 70,
         status: 'needs-review',
@@ -107,6 +114,9 @@ describe('App workflow', () => {
     expect(screen.getByLabelText(/agent-hygiene import preview/i)).toHaveTextContent(
       'JSON · 1 findings · complete',
     )
+    expect(screen.getByLabelText(/agent-hygiene import preview/i)).toHaveTextContent(
+      'revision 111111111111',
+    )
     expect(screen.queryByText(/AH003 · Hard-coded secret/i)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /import into current stage/i }))
@@ -117,6 +127,12 @@ describe('App workflow', () => {
     expect(within(importedCard as HTMLElement).getByText(/<img src=x onerror/i)).toBeInTheDocument()
     expect(document.querySelector('img[src="x"]')).toBeNull()
     expect(screen.getByText(/1 high-severity imported finding/i)).toBeInTheDocument()
+    expect(
+      within(importedCard as HTMLElement).getByText(/resolve only after a complete rerun/i),
+    ).toBeInTheDocument()
+    expect(
+      within(importedCard as HTMLElement).queryByRole('button', { name: /mark resolved/i }),
+    ).not.toBeInTheDocument()
 
     await user.click(
       within(importedCard as HTMLElement).getByRole('button', { name: /accept risk/i }),

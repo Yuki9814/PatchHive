@@ -611,6 +611,31 @@ select:focus-visible {
   resize: vertical;
 }
 
+.scan-import-help {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-soft);
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  padding: 9px 10px;
+}
+
+.scan-import-help summary {
+  cursor: pointer;
+  color: var(--color-heading);
+  font-weight: 800;
+}
+
+.scan-import-help p {
+  margin: 8px 0 0;
+}
+
+.scan-import-help code {
+  overflow-wrap: anywhere;
+  color: var(--color-heading);
+  font-family: var(--font-mono);
+}
+
 .scan-import-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

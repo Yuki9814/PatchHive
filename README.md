@@ -19,12 +19,14 @@ PatchHive is intentionally local-first:
 
 ## Scanner-to-maintainer workflow
 
-PatchHive v0.3 accepts native JSON and SARIF 2.1.0 produced by
+PatchHive v0.4 accepts native JSON and SARIF 2.1.0 produced by
 [agent-hygiene](https://github.com/Yuki9814/agent-hygiene). The complete file is
 parsed in the browser and is not uploaded.
 
 ```bash
-agent-hygiene scan . --format json --output agent-hygiene.json
+agent-hygiene scan . --format json --portable \
+  --source-revision "$(git rev-parse --verify HEAD)" \
+  --output agent-hygiene.json
 # or
 agent-hygiene scan . --format sarif --output agent-hygiene.sarif
 ```
@@ -36,13 +38,15 @@ In PatchHive:
 3. Review the preview. Nothing enters the workspace before confirmation.
 4. Import normalized findings into the current stage.
 5. Triage high-severity findings. Accepted risks require a non-empty resolution
-   note; the note survives reload and is included safely in the handoff.
+   note. A fixed finding resolves only after a complete rerun with the same
+   opaque scan scope no longer reports it.
 6. Attach follow-up evidence and complete the human approval gates.
 7. Copy or download the evidence-backed Markdown handoff.
 
 Imported findings keep their format, source filename, declared-or-unverified
 producer status, rule ID, fingerprint, normalized identity, scan-completion
-status, opaque scope ID, and import time. Absolute scanner roots are discarded.
+status, opaque scope ID, declared source revision, and import time. Absolute
+scanner roots are discarded.
 A fingerprint is accepted only when it identifies the same normalized finding;
 collisions fail closed.
 
@@ -50,9 +54,15 @@ A complete rerun updates only evidence from the same scope. Findings still
 present become actionable complete-scan evidence, findings absent from the rerun
 become resolved, and unrelated scopes remain blocked. Native JSON derives scope
 from `summary.scope_fingerprint` and SARIF from
-`run.properties.scopeFingerprint`, so versioned v0.3 output matches across
+`run.properties.scopeFingerprint`, so versioned output matches across
 formats without exposing a runner path. Legacy JSON root hashing and unscoped
 SARIF source filenames remain compatibility fallbacks only.
+
+The agent-hygiene v0.5 Action can emit portable native JSON before its final
+severity gate. PatchHive stores its producer and source-revision fields as
+declarations, not signatures. The frozen finding/clean-rerun pair and exact
+SHA-256 digests are documented in the
+[v0.4 interoperability note](docs/interop-v0.4.0.md).
 
 ## What works
 
@@ -62,10 +72,12 @@ SARIF source filenames remain compatibility fallbacks only.
 - evidence provenance and open/accepted/resolved triage states
 - deterministic severity-first sorting, severity/triage filters, and 25-item pagination
 - fail-closed accepted-risk notes plus an accepted-risk handoff appendix
+- complete same-scope rerun proof for resolved scanner findings
+- portable agent-hygiene Action JSON intake with declared source revisions
 - stages, structured maintainer lanes, findings, and human approval gates
 - handoff readiness checks and evidence-source coverage
 - Markdown copy/download plus versioned workspace import/export
-- schema v1-v6 migration to schema v7 without changing the browser key
+- schema v1-v7 migration to schema v8 without changing the browser key
 - responsive desktop/mobile workflow and keyboard-accessible controls
 
 Agent lanes are structured planning surfaces, not autonomous agents. External
@@ -78,7 +90,8 @@ Scanner and workspace files are untrusted input. PatchHive:
 - accepts at most 1 MB and 250 scanner findings
 - marks only versioned producer metadata as declared; legacy output stays visibly unverified
 - stores normalized fields rather than the complete scanner document
-- keeps imported scanner facts immutable while allowing explicit triage changes
+- keeps imported scanner facts immutable, including after resolution, while
+  allowing explicit open/accepted triage changes
 - renders finding content through React text nodes, never HTML injection
 - rejects absolute paths, parent traversal, fingerprint collisions, and invalid SARIF levels
 - only accepts credential-free `http` and `https` evidence links
@@ -86,6 +99,7 @@ Scanner and workspace files are untrusted input. PatchHive:
 - repairs dangling workspace references, rejects duplicate critical IDs, and
   reopens incomplete imported provenance
 - blocks handoff when an accepted scanner risk lacks a non-empty resolution note
+- reopens legacy or forged resolved scanner findings without complete-rerun provenance
 - neutralizes imported mentions, issue references, and automatic links in Markdown
 - ships a production CSP with network connections disabled and uses no runtime
   dependencies beyond React
@@ -131,7 +145,7 @@ Pages asset-path smoke test, and a full high-severity dependency audit.
 
 ## Project status
 
-v0.3 is a maintained preview. Current constraints are deliberate:
+v0.4 is a maintained preview. Current constraints are deliberate:
 
 - no remote repository fetch or authenticated GitHub integration
 - no cross-device sync

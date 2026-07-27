@@ -16,7 +16,7 @@ not promised before the preceding acceptance gate is met.
 
 - [x] add deterministic sorting, severity/triage filters, and 25-item pagination
 - [x] require a non-empty resolution note for accepted scanner risks
-- [ ] require follow-up evidence for manually resolved scanner risks
+- [x] require a complete same-scope rerun before scanner risks can be resolved
 - [x] export a scanner-triage appendix with accepted-risk rationale
 - [x] publish documented performance measurements at the 250-finding limit
 - [ ] test two additional evergreen browsers
@@ -28,12 +28,16 @@ and no external usability claim before real trial evidence exists.
 
 ## v0.4 — contribution handoff quality
 
+- [x] add portable agent-hygiene Action JSON intake and frozen cross-project fixtures
+- [x] carry declared source revision and complete-rerun provenance into handoff
 - [ ] add opt-in redaction checks before Markdown copy/download
 - [ ] add shareable, non-secret handoff templates for issue and pull-request use
 - [ ] add import fixture contributions with a documented review rubric
 
 Acceptance gate: contributor documentation, security review, and evidence that
 the new output reduces manual cleanup without expanding the network boundary.
+Interoperability is locally verified; the external maintainer trial remains
+`N=0 / not evaluated`.
 
 ## Out of scope for the preview
 

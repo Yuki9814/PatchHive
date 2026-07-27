@@ -20,6 +20,7 @@ const SCAN_SEVERITIES = new Set<ScanSeverity>(['critical', 'high', 'medium', 'lo
 const SARIF_LEVELS = new Set(['error', 'warning', 'note', 'none'])
 const AGENT_HYGIENE_FINGERPRINT = /^[a-f0-9]{20}$/
 const AGENT_HYGIENE_SCOPE_FINGERPRINT = /^[a-f0-9]{20}$/
+const SOURCE_REVISION = /^[a-f0-9]{7,64}$/
 
 type UnknownRecord = Record<string, unknown>
 
@@ -48,6 +49,7 @@ export type AgentHygieneScan = {
   toolName: 'agent-hygiene'
   producerStatus: 'declared' | 'unverified'
   producerVersion?: string
+  sourceRevision?: string
   scanComplete: boolean
   scanRoot?: string
   scopeId: string
@@ -134,6 +136,22 @@ function normalizeScopeFingerprint(value: unknown, label: string) {
   }
 
   return fingerprint
+}
+
+function normalizeSourceRevision(value: unknown, label: string) {
+  const revision = optionalBoundedString(value, label, 64)
+
+  if (!revision) {
+    return undefined
+  }
+
+  const normalized = revision.toLowerCase()
+
+  if (!SOURCE_REVISION.test(normalized)) {
+    throw new Error(`${label} must contain 7 to 64 hexadecimal characters.`)
+  }
+
+  return normalized
 }
 
 function deriveImportedScopeId(
@@ -394,6 +412,10 @@ function parseNativeJson(parsed: UnknownRecord, sourceName: string): AgentHygien
     ? undefined
     : optionalBoundedString(parsed.summary.root, 'Scan root', MAX_PATH_LENGTH)
   const scanComplete = parsed.summary.complete && discoveryIssues.length === 0
+  const sourceRevision = normalizeSourceRevision(
+    parsed.summary.source_revision,
+    'Scan source revision',
+  )
 
   return {
     format: 'json',
@@ -401,6 +423,7 @@ function parseNativeJson(parsed: UnknownRecord, sourceName: string): AgentHygien
     toolName: 'agent-hygiene',
     producerStatus,
     producerVersion,
+    sourceRevision,
     scanComplete,
     scopeId: deriveImportedScopeId(scopeFingerprint, legacyScanRoot, sourceName),
     score,
@@ -633,6 +656,7 @@ function parseSarif(parsed: UnknownRecord, sourceName: string): AgentHygieneScan
   let status: string | undefined
   let producerStatus: AgentHygieneScan['producerStatus'] = 'declared'
   let producerVersion: string | undefined
+  let sourceRevision: string | undefined
   let scopeFingerprint: string | undefined
 
   parsed.runs.forEach((run, runIndex) => {
@@ -705,6 +729,20 @@ function parseSarif(parsed: UnknownRecord, sourceName: string): AgentHygieneScan
     }
 
     if (isRecord(run.properties)) {
+      const runSourceRevision = normalizeSourceRevision(
+        run.properties.sourceRevision,
+        `SARIF run ${runIndex + 1} source revision`,
+      )
+
+      if (
+        sourceRevision &&
+        runSourceRevision &&
+        sourceRevision !== runSourceRevision
+      ) {
+        throw new Error('SARIF runs declare different source revisions.')
+      }
+
+      sourceRevision = sourceRevision ?? runSourceRevision
       const runScopeFingerprint = normalizeScopeFingerprint(
         run.properties.scopeFingerprint,
         `SARIF run ${runIndex + 1} scope fingerprint`,
@@ -748,6 +786,7 @@ function parseSarif(parsed: UnknownRecord, sourceName: string): AgentHygieneScan
     toolName: 'agent-hygiene',
     producerStatus,
     producerVersion,
+    sourceRevision,
     scanComplete: scanComplete && allDiscoveryIssues.length === 0,
     scopeId: deriveImportedScopeId(scopeFingerprint, undefined, sourceName),
     score,

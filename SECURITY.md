@@ -25,21 +25,28 @@ Workspace and scanner files are untrusted input:
 - legacy output is labeled unverified rather than treated as declared provenance
 - SARIF must be 2.1.0, use supported levels, and identify the agent-hygiene driver
 - producer scope fingerprints correlate JSON and SARIF without importing runner roots
+- source revisions are bounded declarations, not signatures or authenticity proof
 - legacy JSON roots are hashed only as a compatibility fallback; SARIF roots are ignored
 - absolute or traversing finding paths are rejected
 - fingerprint collisions fail closed and reruns supersede only the same opaque scope
 - imported scanner facts stay immutable apart from their explicit triage state
 - accepted scanner risks require a bounded, non-empty resolution note; imported
   workspaces with missing notes remain blocked
+- scanner findings can resolve only through a complete same-scope rerun;
+  legacy or forged resolved records without that provenance reopen on migration
 - normalized fields render as React text, not injected HTML
 - imported Markdown cannot create automatic mentions, issue links, or external links
 - evidence links allow only credential-free HTTP(S)
-- unresolved workspace provenance cannot be deleted through reducer actions
+- imported workspace provenance cannot be deleted through reducer actions,
+  including after a finding is resolved
 - dangling workspace references are repaired and critical duplicate IDs are rejected
-- incomplete scans and undocumented accepted risks cannot silently become a ready handoff
+- incomplete scans, undocumented accepted risks, and unevidenced resolved
+  findings cannot silently become a ready handoff
 
 The production content security policy disables all network connections; local
-development permits only the Vite loopback WebSocket used for hot reload.
+development permits only the Vite loopback WebSocket used for hot reload and
+inline styles injected by Vite. The production build gate rejects both
+development-only exceptions.
 GitHub Actions are pinned to immutable commits, the lockfile uses the official
 npm registry, and CI runs the full dependency audit.
 

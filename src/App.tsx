@@ -242,11 +242,8 @@ function App() {
   const deleteEvidence = (evidenceId: string) => {
     const evidence = activeMission.evidence.find((item) => item.id === evidenceId)
 
-    if (
-      evidence?.provenance?.importer === 'agent-hygiene' &&
-      evidence.triageStatus !== 'resolved'
-    ) {
-      setStatusMessage('Imported scanner evidence stays locked until it is resolved.')
+    if (evidence?.provenance?.importer === 'agent-hygiene') {
+      setStatusMessage('Imported scanner evidence remains immutable.')
       return
     }
 

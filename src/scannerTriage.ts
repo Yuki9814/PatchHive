@@ -30,3 +30,11 @@ export function isAcceptedScannerRiskMissingResolution(evidence: EvidenceItem) {
     !normalizeResolutionNote(evidence.resolutionNote)
   )
 }
+
+export function isScannerRiskResolvedByRerun(evidence: EvidenceItem) {
+  return (
+    isScannerRiskEvidence(evidence) &&
+    evidence.triageStatus === 'resolved' &&
+    evidence.provenance?.resolution?.method === 'complete-rerun'
+  )
+}

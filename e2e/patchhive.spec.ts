@@ -1,10 +1,29 @@
 import { expect, test } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { createSarifScan } from '../scripts/generate-scan-fixtures.mjs'
+
+const findingFixture = readFileSync(
+  resolve(process.cwd(), 'fixtures/agent-hygiene/v0.5.0/findings.json'),
+)
+const cleanRerunFixture = readFileSync(
+  resolve(process.cwd(), 'fixtures/agent-hygiene/v0.5.0/clean-rerun.json'),
+)
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => window.localStorage.clear())
   await page.reload()
+})
+
+test('loads the development stylesheet under the environment-specific CSP', async ({
+  page,
+}) => {
+  await expect(page.locator('main.workspace-shell')).toHaveCSS('display', 'grid')
+  await expect(page.getByRole('button', { name: 'New mission' })).toHaveCSS(
+    'border-radius',
+    '8px',
+  )
 })
 
 test('creates a mission, links evidence, and unlocks handoff export', async ({ page }) => {
@@ -179,7 +198,53 @@ test('handles a deterministic 250-finding scan with filters, acceptance notes, a
         return raw ? JSON.parse(raw).settings.schemaVersion : 0
       }),
     )
-    .toBe(7)
+    .toBe(8)
+})
+
+test('requires a complete same-scope rerun before a scanner finding resolves', async ({
+  page,
+}) => {
+  await page.getByLabel('Import agent-hygiene scan').setInputFiles({
+    name: 'findings.json',
+    mimeType: 'application/json',
+    buffer: findingFixture,
+  })
+  await expect(page.getByLabel('agent-hygiene import preview')).toContainText(
+    'revision 111111111111',
+  )
+  await page.getByRole('button', { name: 'Import into current stage' }).click()
+
+  const findingCard = page.getByRole('article').filter({
+    hasText: 'AH002 · Prompt override or secrecy instruction',
+  })
+  await expect(findingCard).toContainText(
+    'Fixed findings resolve only after a complete rerun of this scan scope.',
+  )
+  await expect(findingCard.getByRole('button', { name: 'Mark resolved' })).toHaveCount(0)
+
+  await page.getByLabel('Import agent-hygiene scan').setInputFiles({
+    name: 'clean-rerun.json',
+    mimeType: 'application/json',
+    buffer: cleanRerunFixture,
+  })
+  await expect(page.getByLabel('agent-hygiene import preview')).toContainText(
+    'revision 222222222222',
+  )
+  await page.getByRole('button', { name: 'Import into current stage' }).click()
+
+  await expect(findingCard).toContainText(
+    'Resolved by complete same-scope rerun clean-rerun.json at revision 222222222222.',
+  )
+  await page.reload()
+  await expect(findingCard).toContainText('resolved')
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const raw = window.localStorage.getItem('patchhive.workspace.v1')
+        return raw ? JSON.parse(raw).settings.schemaVersion : 0
+      }),
+    )
+    .toBe(8)
 })
 
 test('keeps an incomplete scan blocked after an unrelated complete scope import and reload', async ({

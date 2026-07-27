@@ -10,6 +10,16 @@ export type ScanSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
 export type EvidenceTriageStatus = 'open' | 'accepted' | 'resolved'
 
+export type ScannerResolution = {
+  method: 'complete-rerun'
+  format: 'json' | 'sarif'
+  sourceName: string
+  producerStatus?: 'declared' | 'unverified'
+  producerVersion?: string
+  sourceRevision?: string
+  importedAt: string
+}
+
 export type EvidenceProvenance = {
   importer: 'agent-hygiene'
   format: 'json' | 'sarif'
@@ -17,6 +27,7 @@ export type EvidenceProvenance = {
   toolName: 'agent-hygiene'
   producerStatus?: 'declared' | 'unverified'
   producerVersion?: string
+  sourceRevision?: string
   scanComplete: boolean
   importedAt: string
   scanRoot?: string
@@ -24,6 +35,7 @@ export type EvidenceProvenance = {
   ruleId?: string
   fingerprint?: string
   findingKey?: string
+  resolution?: ScannerResolution
 }
 
 export type MissionStatus = 'active' | 'ready' | 'archived'

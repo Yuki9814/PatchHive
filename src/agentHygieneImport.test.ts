@@ -340,6 +340,7 @@ describe('agent-hygiene import', () => {
           ...nativeScan().summary,
           root: `/private/${'runner-path-'.repeat(200)}`,
           scope_fingerprint: scopeFingerprint,
+          source_revision: 'ABCDEF0123456789',
         },
       }),
       'native.json',
@@ -351,6 +352,7 @@ describe('agent-hygiene import', () => {
           emptySarifRun({
             root: '/private/runner/path-that-must-be-ignored',
             scopeFingerprint,
+            sourceRevision: 'abcdef0123456789',
           }),
         ],
       }),
@@ -359,6 +361,8 @@ describe('agent-hygiene import', () => {
 
     expect(native.scopeId).toBe(`scope-${scopeFingerprint}`)
     expect(sarif.scopeId).toBe(native.scopeId)
+    expect(native.sourceRevision).toBe('abcdef0123456789')
+    expect(sarif.sourceRevision).toBe(native.sourceRevision)
     expect(native.scanRoot).toBeUndefined()
     expect(sarif.scanRoot).toBeUndefined()
   })
@@ -407,6 +411,34 @@ describe('agent-hygiene import', () => {
         }),
       ),
     ).toThrow(/different scope fingerprints/i)
+  })
+
+  it('rejects invalid or conflicting declared source revisions', () => {
+    expect(() =>
+      parseAgentHygieneImport(
+        JSON.stringify({
+          ...nativeScan(),
+          schema_version: 1,
+          tool: { name: 'agent-hygiene', version: '0.5.0' },
+          summary: {
+            ...nativeScan().summary,
+            source_revision: 'main',
+          },
+        }),
+      ),
+    ).toThrow(/source revision.*hexadecimal/i)
+
+    expect(() =>
+      parseAgentHygieneImport(
+        JSON.stringify({
+          version: '2.1.0',
+          runs: [
+            emptySarifRun({ sourceRevision: 'aaaaaaaaaaaaaaaa' }),
+            emptySarifRun({ sourceRevision: 'bbbbbbbbbbbbbbbb' }),
+          ],
+        }),
+      ),
+    ).toThrow(/different source revisions/i)
   })
 
   it('rejects unsupported SARIF levels instead of downgrading them', () => {
