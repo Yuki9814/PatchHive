@@ -16,7 +16,7 @@ import type {
 } from './types'
 
 const STORAGE_KEY = 'patchhive.workspace.v1'
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 export const MAX_WORKSPACE_IMPORT_BYTES = 1_000_000
 
 export type WorkspaceImportPreview = {
@@ -73,6 +73,23 @@ function isTriageStatus(value: unknown): value is EvidenceTriageStatus {
   return ['open', 'accepted', 'resolved'].includes(String(value))
 }
 
+function isScannerResolution(value: unknown) {
+  return (
+    isRecord(value) &&
+    value.method === 'complete-rerun' &&
+    ['json', 'sarif'].includes(String(value.format)) &&
+    typeof value.sourceName === 'string' &&
+    (value.producerStatus === undefined ||
+      value.producerStatus === 'declared' ||
+      value.producerStatus === 'unverified') &&
+    (value.producerVersion === undefined || typeof value.producerVersion === 'string') &&
+    (value.sourceRevision === undefined ||
+      (typeof value.sourceRevision === 'string' &&
+        /^[0-9a-f]{7,64}$/.test(value.sourceRevision))) &&
+    typeof value.importedAt === 'string'
+  )
+}
+
 function isEvidenceProvenance(value: unknown): value is EvidenceProvenance {
   return (
     isRecord(value) &&
@@ -84,13 +101,17 @@ function isEvidenceProvenance(value: unknown): value is EvidenceProvenance {
       value.producerStatus === 'declared' ||
       value.producerStatus === 'unverified') &&
     (value.producerVersion === undefined || typeof value.producerVersion === 'string') &&
+    (value.sourceRevision === undefined ||
+      (typeof value.sourceRevision === 'string' &&
+        /^[0-9a-f]{7,64}$/.test(value.sourceRevision))) &&
     typeof value.scanComplete === 'boolean' &&
     typeof value.importedAt === 'string' &&
     (value.scanRoot === undefined || typeof value.scanRoot === 'string') &&
     (value.scopeId === undefined || typeof value.scopeId === 'string') &&
     (value.ruleId === undefined || typeof value.ruleId === 'string') &&
     (value.fingerprint === undefined || typeof value.fingerprint === 'string') &&
-    (value.findingKey === undefined || typeof value.findingKey === 'string')
+    (value.findingKey === undefined || typeof value.findingKey === 'string') &&
+    (value.resolution === undefined || isScannerResolution(value.resolution))
   )
 }
 
@@ -344,7 +365,7 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
           item.agentId && validLaneIds.has(item.agentId)
             ? item.agentId
             : undefined
-        const triageStatus =
+        const candidateTriageStatus =
           provenance && !provenance.scanComplete
             ? 'open' as const
             : isTriageStatus(item.triageStatus)
@@ -352,6 +373,29 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
               : provenance
                 ? 'open'
                 : undefined
+        const isScannerRisk =
+          Boolean(
+            provenance?.ruleId &&
+              provenance.ruleId !== 'scan/summary' &&
+              !provenance.ruleId.startsWith('discovery/'),
+          )
+        const triageStatus =
+          isScannerRisk &&
+          candidateTriageStatus === 'resolved' &&
+          provenance?.resolution?.method !== 'complete-rerun'
+            ? 'open'
+            : candidateTriageStatus
+        const normalizedProvenance = provenance
+          ? {
+              ...provenance,
+              resolution:
+                isScannerRisk &&
+                triageStatus === 'resolved' &&
+                provenance.resolution?.method === 'complete-rerun'
+                  ? provenance.resolution
+                  : undefined,
+            }
+          : undefined
 
         return {
           ...item,
@@ -366,7 +410,7 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
             provenance && triageStatus === 'accepted'
               ? normalizeResolutionNote(item.resolutionNote)
               : undefined,
-          provenance,
+          provenance: normalizedProvenance,
           updatedAt: item.updatedAt ?? item.createdAt ?? new Date().toISOString(),
         }
       })

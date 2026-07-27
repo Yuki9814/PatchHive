@@ -17,6 +17,10 @@ if (!html.includes("connect-src 'none'") || /wss?:\/\//.test(html)) {
   throw new Error('Pages build CSP permits a development WebSocket connection.')
 }
 
+if (!html.includes("style-src 'self'") || html.includes("'unsafe-inline'")) {
+  throw new Error('Pages build CSP permits development-only inline styles.')
+}
+
 const scriptMatch = html.match(/<script[^>]+src="(\.\/assets\/[^"]+\.js)"/)
 
 if (!scriptMatch) {

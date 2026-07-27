@@ -8,8 +8,11 @@ function environmentCsp() {
       const connectSource = context.server
         ? "'self' ws://localhost:* ws://127.0.0.1:*"
         : "'none'"
+      const styleSource = context.server ? "'self' 'unsafe-inline'" : "'self'"
 
-      return html.replace('__PATCHHIVE_CONNECT_SRC__', connectSource)
+      return html
+        .replace('__PATCHHIVE_CONNECT_SRC__', connectSource)
+        .replace('__PATCHHIVE_STYLE_SRC__', styleSource)
     },
   }
 }

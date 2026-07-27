@@ -4,6 +4,7 @@ import { normalizeExternalUrl } from './safeUrl'
 import {
   isAcceptedScannerRiskMissingResolution,
   isScannerRiskEvidence,
+  isScannerRiskResolvedByRerun,
   normalizeResolutionNote,
 } from './scannerTriage'
 import type { ApprovalGate, EvidenceItem, Mission, MissionStage } from './types'
@@ -29,12 +30,14 @@ function evidenceLine(item: EvidenceItem) {
       : ''
   const severity = item.severity ? ` ${item.severity}/${item.triageStatus ?? 'open'}` : ''
   const provenance = item.provenance
-    ? `; imported from ${item.provenance.toolName} ${item.provenance.format.toUpperCase()} (${neutralizeUntrustedMarkdown(item.provenance.sourceName)}; producer ${item.provenance.producerStatus ?? 'unverified'})`
+    ? `; imported from ${item.provenance.toolName} ${item.provenance.format.toUpperCase()} (${neutralizeUntrustedMarkdown(item.provenance.sourceName)}; producer ${item.provenance.producerStatus ?? 'unverified'}${item.provenance.sourceRevision ? `; revision ${neutralizeUntrustedMarkdown(item.provenance.sourceRevision)}` : ''})`
     : ''
   const resolutionNote = normalizeResolutionNote(item.resolutionNote)
   const resolution =
     item.triageStatus === 'accepted' && resolutionNote
       ? `; acceptance note: ${neutralizeUntrustedMarkdown(resolutionNote)}`
+      : isScannerRiskResolvedByRerun(item)
+        ? `; resolved by complete same-scope rerun ${neutralizeUntrustedMarkdown(item.provenance?.resolution?.sourceName ?? 'unknown source')}`
       : ''
   return `- [${item.kind}${severity}] ${display(item.title)}: ${display(item.detail)}${source}${provenance}${resolution}`
 }
@@ -81,9 +84,22 @@ function getImportedScanBlockers(mission: Mission) {
   const incompleteImports = new Map<string, string>()
   let openHighSeverity = 0
   let acceptedWithoutResolution = 0
+  let resolvedWithoutRerun = 0
 
   mission.evidence.forEach((evidence) => {
-    if (!evidence.provenance || evidence.triageStatus === 'resolved') {
+    if (!evidence.provenance) {
+      return
+    }
+
+    if (
+      isScannerRiskEvidence(evidence) &&
+      evidence.triageStatus === 'resolved' &&
+      !isScannerRiskResolvedByRerun(evidence)
+    ) {
+      resolvedWithoutRerun += 1
+    }
+
+    if (evidence.triageStatus === 'resolved') {
       return
     }
 
@@ -120,6 +136,11 @@ function getImportedScanBlockers(mission: Mission) {
           `${acceptedWithoutResolution} accepted scanner risk(s) need a non-empty resolution note`,
         ]
       : []),
+    ...(resolvedWithoutRerun > 0
+      ? [
+          `${resolvedWithoutRerun} resolved scanner finding(s) lack complete same-scope rerun evidence`,
+        ]
+      : []),
   ]
 }
 
@@ -138,6 +159,25 @@ function acceptedScannerRisks(mission: Mission) {
     .map(acceptedScannerRiskLine)
 
   return risks.length > 0 ? risks.join('\n') : '- None recorded'
+}
+
+function resolvedScannerFindingLine(evidence: EvidenceItem) {
+  const source = neutralizeUntrustedMarkdown(
+    evidence.provenance?.resolution?.sourceName ?? 'unknown source',
+  )
+  const revision = evidence.provenance?.resolution?.sourceRevision
+    ? ` at revision ${neutralizeUntrustedMarkdown(evidence.provenance.resolution.sourceRevision)}`
+    : ''
+
+  return `- ${neutralizeUntrustedMarkdown(evidence.title)}: complete same-scope rerun ${source}${revision}`
+}
+
+function resolvedScannerFindings(mission: Mission) {
+  const findings = mission.evidence
+    .filter(isScannerRiskResolvedByRerun)
+    .map(resolvedScannerFindingLine)
+
+  return findings.length > 0 ? findings.join('\n') : '- None recorded'
 }
 
 export function getStageGateBlocker(mission: Mission, targetStageId: string) {
@@ -224,6 +264,10 @@ ${mission.evidence.length > 0 ? mission.evidence.map(evidenceLine).join('\n') : 
 ## Accepted Scanner Risks
 
 ${acceptedScannerRisks(mission)}
+
+## Resolved Scanner Findings
+
+${resolvedScannerFindings(mission)}
 
 ## Handoff Evidence Sources
 

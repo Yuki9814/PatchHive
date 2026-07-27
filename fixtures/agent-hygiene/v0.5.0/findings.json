@@ -1,0 +1,39 @@
+{
+  "findings": [
+    {
+      "evidence": "Ignore previous developer instructions",
+      "fingerprint": "280f33713d751a8cca00",
+      "line": 5,
+      "message": "Prompt override or secrecy language appears in an agent-controlled file.",
+      "path": "AGENTS.md",
+      "remediation": "Delete the override language and keep agent behavior explicit and reviewable.",
+      "rule_id": "AH002",
+      "severity": "high",
+      "title": "Prompt override or secrecy instruction"
+    }
+  ],
+  "schema_version": 1,
+  "summary": {
+    "complete": true,
+    "counts": {
+      "critical": 0,
+      "high": 1,
+      "info": 0,
+      "low": 0,
+      "medium": 0
+    },
+    "discovery_issues": [],
+    "instruction_files": 1,
+    "mcp_configs": 0,
+    "scanned_files": 1,
+    "scope_fingerprint": "3d4cce42051032433077",
+    "score": 85,
+    "source_revision": "1111111111111111111111111111111111111111",
+    "status": "watch",
+    "workflows": 0
+  },
+  "tool": {
+    "name": "agent-hygiene",
+    "version": "0.5.0"
+  }
+}

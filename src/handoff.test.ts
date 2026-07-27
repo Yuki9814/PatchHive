@@ -222,4 +222,74 @@ describe('handoff', () => {
     expect(markdown).not.toContain('@maintainer')
     expect(markdown).not.toContain('https://example.com')
   })
+
+  it('accepts resolved scanner findings only with complete-rerun provenance', () => {
+    const mission = readyMission()
+    const importedAt = '2026-07-27T00:00:00.000Z'
+    const resolvedRisk = {
+      id: 'resolved-scanner-risk',
+      kind: 'file' as const,
+      title: 'AH002 · Prompt override',
+      detail: 'The unsafe instruction no longer appears.',
+      filePath: 'AGENTS.md:5',
+      severity: 'high' as const,
+      triageStatus: 'resolved' as const,
+      provenance: {
+        importer: 'agent-hygiene' as const,
+        format: 'json' as const,
+        sourceName: 'findings.json',
+        toolName: 'agent-hygiene' as const,
+        producerStatus: 'declared' as const,
+        producerVersion: '0.5.0',
+        sourceRevision: '1111111111111111111111111111111111111111',
+        scanComplete: true,
+        importedAt,
+        scopeId: 'scope-rerun',
+        ruleId: 'AH002',
+        fingerprint: '12121212121212121212',
+        findingKey: 'finding-resolved-risk',
+      },
+      createdAt: importedAt,
+      updatedAt: importedAt,
+    }
+    const forgedMission = {
+      ...mission,
+      evidence: [resolvedRisk, ...mission.evidence],
+    }
+
+    expect(getHandoffBlockers(forgedMission)).toContain(
+      '1 resolved scanner finding(s) lack complete same-scope rerun evidence',
+    )
+
+    const evidencedMission = {
+      ...forgedMission,
+      evidence: [
+        {
+          ...resolvedRisk,
+          provenance: {
+            ...resolvedRisk.provenance,
+            resolution: {
+              method: 'complete-rerun' as const,
+              format: 'json' as const,
+              sourceName: 'clean-rerun.json',
+              producerStatus: 'declared' as const,
+              producerVersion: '0.5.0',
+              sourceRevision: '2222222222222222222222222222222222222222',
+              importedAt,
+            },
+          },
+        },
+        ...mission.evidence,
+      ],
+    }
+    const markdown = buildHandoffMarkdown(evidencedMission)
+
+    expect(getHandoffBlockers(evidencedMission)).not.toContain(
+      '1 resolved scanner finding(s) lack complete same-scope rerun evidence',
+    )
+    expect(markdown).toContain('## Resolved Scanner Findings')
+    expect(markdown).toContain(
+      'complete same-scope rerun clean-rerun.json at revision 2222222222222222222222222222222222222222',
+    )
+  })
 })

@@ -413,6 +413,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
             item.id !== action.evidenceId ||
             !isScannerRiskEvidence(item) ||
             !item.provenance?.scanComplete ||
+            action.triageStatus === 'resolved' ||
             (action.triageStatus === 'accepted' && !resolutionNote)
           ) {
             return item
@@ -424,6 +425,10 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
             triageStatus: action.triageStatus,
             resolutionNote:
               action.triageStatus === 'accepted' ? resolutionNote : undefined,
+            provenance: {
+              ...item.provenance,
+              resolution: undefined,
+            },
             updatedAt,
           }
         })
@@ -459,10 +464,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
       return mutateMission(state, action.missionId, (mission) => {
         const target = mission.evidence.find((evidence) => evidence.id === action.evidenceId)
 
-        if (
-          target?.provenance?.importer === 'agent-hygiene' &&
-          target.triageStatus !== 'resolved'
-        ) {
+        if (target?.provenance?.importer === 'agent-hygiene') {
           return mission
         }
 
@@ -632,6 +634,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
           toolName: 'agent-hygiene' as const,
           producerStatus: action.scan.producerStatus ?? 'unverified',
           producerVersion: action.scan.producerVersion,
+          sourceRevision: action.scan.sourceRevision,
           scanComplete: action.scan.scanComplete,
           importedAt,
           scanRoot: action.scan.scanRoot,
@@ -710,7 +713,15 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
                 resolutionNote: undefined,
                 provenance: {
                   ...provenance,
-                  ...sharedProvenance,
+                  resolution: {
+                    method: 'complete-rerun' as const,
+                    format: sharedProvenance.format,
+                    sourceName: sharedProvenance.sourceName,
+                    producerStatus: sharedProvenance.producerStatus,
+                    producerVersion: sharedProvenance.producerVersion,
+                    sourceRevision: sharedProvenance.sourceRevision,
+                    importedAt,
+                  },
                 },
                 updatedAt: importedAt,
               }

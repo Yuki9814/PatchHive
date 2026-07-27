@@ -106,6 +106,21 @@ export function ScanImportPanel({
         Preview agent-hygiene JSON or SARIF locally. After confirmation, PatchHive persists only
         normalized findings and provenance, not the complete source document.
       </p>
+      <details className="scan-import-help">
+        <summary>Create a portable import file</summary>
+        <p>
+          Run{' '}
+          <code>
+            agent-hygiene scan . --format json --portable --source-revision &lt;commit&gt;
+            --output agent-hygiene.json
+          </code>
+          , or use the agent-hygiene v0.5 Action <code>json</code> input and download its artifact.
+        </p>
+        <p>
+          A fixed finding resolves only after a complete rerun with the same opaque scan scope no
+          longer reports it.
+        </p>
+      </details>
       <label>
         Scan JSON or SARIF
         <textarea
@@ -148,6 +163,7 @@ export function ScanImportPanel({
           <p>
             Producer metadata: {preview.producerStatus}
             {preview.producerVersion ? ` · v${preview.producerVersion}` : ''}
+            {preview.sourceRevision ? ` · revision ${preview.sourceRevision.slice(0, 12)}` : ''}
           </p>
           <p>
             Critical {preview.severityCounts.critical} · High {preview.severityCounts.high} ·

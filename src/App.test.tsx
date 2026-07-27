@@ -77,9 +77,10 @@ describe('App workflow', () => {
     render(<App />)
     const scanJson = JSON.stringify({
       schema_version: 1,
-      tool: { name: 'agent-hygiene', version: '0.3.0' },
+      tool: { name: 'agent-hygiene', version: '0.5.0' },
       summary: {
         root: '/Users/private/repository',
+        source_revision: '1111111111111111111111111111111111111111',
         complete: true,
         score: 70,
         status: 'needs-review',
@@ -107,6 +108,9 @@ describe('App workflow', () => {
     expect(screen.getByLabelText(/agent-hygiene import preview/i)).toHaveTextContent(
       'JSON · 1 findings · complete',
     )
+    expect(screen.getByLabelText(/agent-hygiene import preview/i)).toHaveTextContent(
+      'revision 111111111111',
+    )
     expect(screen.queryByText(/AH003 · Hard-coded secret/i)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /import into current stage/i }))
@@ -117,6 +121,12 @@ describe('App workflow', () => {
     expect(within(importedCard as HTMLElement).getByText(/<img src=x onerror/i)).toBeInTheDocument()
     expect(document.querySelector('img[src="x"]')).toBeNull()
     expect(screen.getByText(/1 high-severity imported finding/i)).toBeInTheDocument()
+    expect(
+      within(importedCard as HTMLElement).getByText(/resolve only after a complete rerun/i),
+    ).toBeInTheDocument()
+    expect(
+      within(importedCard as HTMLElement).queryByRole('button', { name: /mark resolved/i }),
+    ).not.toBeInTheDocument()
 
     await user.click(
       within(importedCard as HTMLElement).getByRole('button', { name: /accept risk/i }),

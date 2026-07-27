@@ -22,7 +22,7 @@ describe('storage', () => {
     expect(loadWorkspace().missions[0].title).toBe('pypdf XObject guard rescue')
   })
 
-  it('migrates saved v4 workspaces to schema v7 without dropping missions', () => {
+  it('migrates saved v4 workspaces to schema v8 without dropping missions', () => {
     const workspace = createDefaultWorkspace()
     const savedMission = {
       ...workspace.missions[0],
@@ -56,7 +56,7 @@ describe('storage', () => {
 
     const migrated = loadWorkspace()
 
-    expect(migrated.settings.schemaVersion).toBe(7)
+    expect(migrated.settings.schemaVersion).toBe(8)
     expect(migrated.settings.missionStatusFilter).toBe('all')
     expect(migrated.settings.mobilePanel).toBe('work')
     expect(migrated.settings.showGuidance).toBe(true)
@@ -66,7 +66,7 @@ describe('storage', () => {
     expect(migrated.missions[0].outputs.fieldSources).toEqual({})
   })
 
-  it('repairs an invalid active mission id and persists schema v7', () => {
+  it('repairs an invalid active mission id and persists schema v8', () => {
     const workspace = createDefaultWorkspace()
     window.localStorage.setItem(
       storageKey,
@@ -84,7 +84,7 @@ describe('storage', () => {
     saveWorkspace(repaired)
 
     expect(repaired.activeMissionId).toBe(repaired.missions[0].id)
-    expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '{}').settings.schemaVersion).toBe(7)
+    expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '{}').settings.schemaVersion).toBe(8)
   })
 
   it('serializes and parses workspace JSON imports through the current migration path', () => {
@@ -98,14 +98,14 @@ describe('storage', () => {
     })
     const imported = parseWorkspaceImport(exported)
 
-    expect(imported.settings.schemaVersion).toBe(7)
+    expect(imported.settings.schemaVersion).toBe(8)
     expect(imported.missions[0].title).toBe(workspace.missions[0].title)
   })
 
   it('previews workspace imports before replacement', () => {
     const preview = previewWorkspaceImport(serializeWorkspaceExport(createDefaultWorkspace()))
 
-    expect(preview.schemaVersion).toBe(7)
+    expect(preview.schemaVersion).toBe(8)
     expect(preview.missionCount).toBe(1)
     expect(preview.evidenceCount).toBeGreaterThan(0)
     expect(preview.archivedCount).toBe(0)
@@ -156,11 +156,11 @@ describe('storage', () => {
           ...workspace,
           settings: {
             ...workspace.settings,
-            schemaVersion: 8,
+            schemaVersion: 9,
           },
         }),
       ),
-    ).toThrow(/newer than supported schema 7/i)
+    ).toThrow(/newer than supported schema 8/i)
   })
 
   it('migrates v5 scanner provenance to an open triage state', () => {
@@ -190,7 +190,7 @@ describe('storage', () => {
       }),
     )
 
-    expect(migrated.settings.schemaVersion).toBe(7)
+    expect(migrated.settings.schemaVersion).toBe(8)
     expect(migrated.missions[0].evidence[0].triageStatus).toBe('open')
     expect(migrated.missions[0].evidence[0].provenance?.sourceName).toBe('scan.json')
     expect(migrated.missions[0].evidence[0].provenance?.scanRoot).toBeUndefined()
@@ -199,8 +199,8 @@ describe('storage', () => {
     expect(migrated.missions[0].evidence[0].provenance?.scopeId).toMatch(/^scope-/)
   })
 
-  it.each([1, 2, 3, 4, 5, 6])(
-    'imports schema v%i through the schema v7 migration path',
+  it.each([1, 2, 3, 4, 5, 6, 7])(
+    'imports schema v%i through the schema v8 migration path',
     (schemaVersion) => {
       const workspace = createDefaultWorkspace()
       const imported = parseWorkspaceImport(
@@ -213,7 +213,7 @@ describe('storage', () => {
         }),
       )
 
-      expect(imported.settings.schemaVersion).toBe(7)
+      expect(imported.settings.schemaVersion).toBe(8)
       expect(imported.missions[0].id).toBe(workspace.missions[0].id)
       expect(imported.missions[0].evidence).toHaveLength(
         workspace.missions[0].evidence.length,
@@ -255,11 +255,93 @@ describe('storage', () => {
     )
     const accepted = migrated.missions[0].evidence[0]
 
-    expect(migrated.settings.schemaVersion).toBe(7)
+    expect(migrated.settings.schemaVersion).toBe(8)
     expect(accepted.triageStatus).toBe('accepted')
     expect(accepted.resolutionNote).toBeUndefined()
     expect(getHandoffBlockers(migrated.missions[0])).toContain(
       '1 accepted scanner risk(s) need a non-empty resolution note',
+    )
+  })
+
+  it('reopens legacy resolved scanner risks without complete-rerun provenance', () => {
+    const workspace = createDefaultWorkspace()
+    const mission = workspace.missions[0]
+    const importedAt = '2026-07-26T00:00:00.000Z'
+    const legacyResolved = {
+      ...mission.evidence[0],
+      severity: 'high' as const,
+      triageStatus: 'resolved' as const,
+      provenance: {
+        importer: 'agent-hygiene' as const,
+        format: 'json' as const,
+        sourceName: 'legacy-resolution.json',
+        toolName: 'agent-hygiene' as const,
+        producerStatus: 'declared' as const,
+        producerVersion: '0.4.1',
+        sourceRevision: '1111111111111111111111111111111111111111',
+        scanComplete: true,
+        importedAt,
+        scopeId: 'scope-legacy-resolution',
+        ruleId: 'AH002',
+        fingerprint: '11111111111111111111',
+        findingKey: 'finding-legacy-resolution',
+      },
+    }
+    const migrated = parseWorkspaceImport(
+      JSON.stringify({
+        ...workspace,
+        missions: [{ ...mission, evidence: [legacyResolved] }],
+        settings: { ...workspace.settings, schemaVersion: 7 },
+      }),
+    )
+
+    expect(migrated.missions[0].evidence[0].triageStatus).toBe('open')
+    expect(migrated.missions[0].evidence[0].provenance?.resolution).toBeUndefined()
+  })
+
+  it('preserves a resolved scanner finding only with complete-rerun provenance', () => {
+    const workspace = createDefaultWorkspace()
+    const mission = workspace.missions[0]
+    const importedAt = '2026-07-27T00:00:00.000Z'
+    const rerunResolved = {
+      ...mission.evidence[0],
+      severity: 'high' as const,
+      triageStatus: 'resolved' as const,
+      provenance: {
+        importer: 'agent-hygiene' as const,
+        format: 'json' as const,
+        sourceName: 'findings.json',
+        toolName: 'agent-hygiene' as const,
+        producerStatus: 'declared' as const,
+        producerVersion: '0.5.0',
+        sourceRevision: '1111111111111111111111111111111111111111',
+        scanComplete: true,
+        importedAt,
+        scopeId: 'scope-complete-rerun',
+        ruleId: 'AH002',
+        fingerprint: '11111111111111111111',
+        findingKey: 'finding-complete-rerun',
+        resolution: {
+          method: 'complete-rerun' as const,
+          format: 'json' as const,
+          sourceName: 'clean-rerun.json',
+          producerStatus: 'declared' as const,
+          producerVersion: '0.5.0',
+          sourceRevision: '2222222222222222222222222222222222222222',
+          importedAt,
+        },
+      },
+    }
+    const imported = parseWorkspaceImport(
+      JSON.stringify({
+        ...workspace,
+        missions: [{ ...mission, evidence: [rerunResolved] }],
+      }),
+    )
+
+    expect(imported.missions[0].evidence[0].triageStatus).toBe('resolved')
+    expect(imported.missions[0].evidence[0].provenance?.resolution?.method).toBe(
+      'complete-rerun',
     )
   })
 
