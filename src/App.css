@@ -13,6 +13,50 @@
   display: none;
 }
 
+.storage-recovery-banner {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid #f59e0b;
+  background: #fffbeb;
+  color: #78350f;
+  padding: 14px 20px;
+}
+
+.storage-recovery-banner__content {
+  min-width: 0;
+}
+
+.storage-recovery-banner h2,
+.storage-recovery-banner p {
+  margin: 0;
+}
+
+.storage-recovery-banner h2 {
+  color: #78350f;
+  font-size: 1rem;
+}
+
+.storage-recovery-banner p {
+  margin-top: 4px;
+  font-size: 0.84rem;
+}
+
+.storage-recovery-banner__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.storage-recovery-banner__actions button {
+  padding: 0 12px;
+}
+
 .sidebar,
 .inspector {
   grid-row: 2;
@@ -1080,6 +1124,20 @@ textarea {
     grid-template-rows: auto auto;
   }
 
+  .workspace-shell--storage-warning {
+    grid-template-rows: auto auto auto;
+  }
+
+  .storage-recovery-banner {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .storage-recovery-banner__actions {
+    justify-content: flex-start;
+  }
+
   .mobile-panel-switcher {
     position: sticky;
     top: 0;
@@ -1092,6 +1150,10 @@ textarea {
     border-bottom: 1px solid var(--color-border);
     background: var(--color-surface);
     padding: 10px 12px;
+  }
+
+  .workspace-shell--storage-warning .mobile-panel-switcher {
+    grid-row: 2;
   }
 
   .mobile-panel-switcher button {
@@ -1132,6 +1194,12 @@ textarea {
   .inspector {
     grid-column: 1;
     grid-row: 2;
+  }
+
+  .workspace-shell--storage-warning .sidebar,
+  .workspace-shell--storage-warning .mission-workspace,
+  .workspace-shell--storage-warning .inspector {
+    grid-row: 3;
   }
 
   .workspace-shell[data-mobile-panel='missions'] .mission-workspace,
@@ -1185,5 +1253,9 @@ textarea {
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .storage-recovery-banner__actions {
+    display: grid;
   }
 }

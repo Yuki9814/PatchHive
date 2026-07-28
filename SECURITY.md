@@ -17,9 +17,32 @@ telemetry, model execution, remote repository fetch, or automatic posting.
 Project context stays in browser storage unless a user explicitly downloads or
 copies it.
 
+Browser storage is not assumed to be durable or available. Corrupt and
+future-schema payloads are isolated without rendering or automatic overwrite;
+import and ordinary reset remain locked until explicit discard. Quota and
+storage-access failures keep the current workspace usable in memory while a
+visible warning offers a local backup and manual retry. Recovery downloads can
+contain the complete original payload and must be handled as sensitive data.
+The lossless recovery envelope stores that payload as a JSON string so escaped
+characters and unmatched UTF-16 surrogate code units can be recovered exactly.
+
+Normal saves and explicit discard compare the exact last successfully read or
+written localStorage string immediately before writing or removing it. A
+`storage` event from another tab also locks this tab in memory-only mode, where
+the user can download the current workspace or reload the stored value. If the
+initial read was unavailable, PatchHive requires fresh explicit confirmation
+for every write attempt until that unknown baseline is successfully replaced.
+Web Storage does not provide an atomic
+compare-and-swap operation: the re-read plus cross-tab event handling narrows
+the conflict window but cannot guarantee strong atomicity if another writer
+changes the same key between the final comparison and `setItem`/`removeItem`.
+Avoid editing the same workspace in multiple tabs when lossless concurrency is
+required.
+
 Workspace and scanner files are untrusted input:
 
 - workspace imports are capped at 1 MB and structurally validated
+- workspace JSON is rejected before parsing when nesting exceeds 64 levels
 - scanner imports are capped at 1 MB, 250 findings, and bounded field lengths
 - versioned JSON must declare agent-hygiene and its version; future schemas are rejected
 - legacy output is labeled unverified rather than treated as declared provenance
@@ -53,8 +76,9 @@ npm registry, and CI runs the full dependency audit.
 ## User responsibilities
 
 Do not paste credentials, private keys, access tokens, private customer data, or
-unsanitized proprietary source. Treat browser profiles and downloaded workspace
-exports as sensitive. Review handoff Markdown before sharing it.
+unsanitized proprietary source. Treat browser profiles, recovery envelopes, and
+downloaded workspace exports as sensitive. Review handoff Markdown before
+sharing it.
 
 ## Supported versions
 

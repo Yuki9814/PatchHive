@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.1 - 2026-07-28
+
+- Classify browser workspace loads as missing, valid, migrated, corrupt,
+  future-schema, or unavailable, and classify writes as saved, conflict,
+  quota, or unavailable without changing schema v8 or
+  `patchhive.workspace.v1`.
+- Preserve the exact last-read localStorage string as a compare-before-write
+  and compare-before-remove expectation. Other-tab storage events lock
+  automatic save, import, and ordinary reset; a conflict keeps the current tab
+  in memory and offers a current backup or explicit reload instead of silently
+  overwriting the newer stored value.
+- Isolate corrupt and future-schema payloads without rendering or automatically
+  overwriting them, including under React StrictMode. Import and ordinary reset
+  stay locked until the user explicitly discards the isolated payload.
+- Add an accessible recovery banner with a lossless JSON recovery envelope for
+  the original localStorage string, a current in-memory workspace backup,
+  explicit discard-and-reset, and manual save retry after quota or
+  storage-access failures.
+- Reject workspace JSON deeper than 64 levels before parsing, treat empty or
+  structurally hostile saved strings as corrupt without coercing untrusted
+  values, and preserve the original string for recovery.
+- Keep the workspace usable in memory after `QuotaExceededError` or
+  `SecurityError`, while making failed persistence visible and never reporting
+  a browser save that did not succeed.
+
 ## 0.4.0 - 2026-07-27
 
 - Remove manual resolution for imported scanner findings. A finding now enters

@@ -26,6 +26,276 @@ test('loads the development stylesheet under the environment-specific CSP', asyn
   )
 })
 
+test('isolates a corrupt workspace, downloads recovery files, and only overwrites after explicit discard', async ({
+  page,
+}) => {
+  const rawPayload =
+    `{"title":"private recovery \\"payload\\" ${String.fromCharCode(0xd800)}","brackets":"[{}]"`
+  await page.evaluate(
+    ({ key, payload }) => window.localStorage.setItem(key, payload),
+    { key: 'patchhive.workspace.v1', payload: rawPayload },
+  )
+  await page.reload()
+
+  const alert = page.getByRole('alert')
+  await expect(alert).toContainText('Saved workspace needs recovery')
+  await expect(alert).toContainText('memory only')
+  await expect(page.getByText(/private recovery/)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Import JSON' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Reset sample' })).toBeDisabled()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.localStorage.getItem('patchhive.workspace.v1'),
+      ),
+    )
+    .toBe(rawPayload)
+
+  const rawDownloadPromise = page.waitForEvent('download')
+  await page
+    .getByRole('button', { name: 'Download lossless recovery envelope' })
+    .click()
+  const rawDownload = await rawDownloadPromise
+  const rawDownloadPath = await rawDownload.path()
+  expect(rawDownload.suggestedFilename()).toMatch(
+    /^patchhive-recovery-envelope-corrupt-.*\.json$/,
+  )
+  expect(rawDownloadPath).not.toBeNull()
+  const recoveryEnvelope = JSON.parse(readFileSync(rawDownloadPath!, 'utf8'))
+  expect(recoveryEnvelope).toEqual({
+    format: 'patchhive.storage-recovery.v1',
+    storageKey: 'patchhive.workspace.v1',
+    payload: rawPayload,
+    reason: 'corrupt',
+  })
+  expect(
+    recoveryEnvelope.payload
+      .split('')
+      .map((character: string) => character.charCodeAt(0)),
+  ).toEqual(rawPayload.split('').map((character) => character.charCodeAt(0)))
+
+  const backupDownloadPromise = page.waitForEvent('download')
+  await page
+    .getByRole('button', { name: 'Download current workspace backup' })
+    .click()
+  const backupDownload = await backupDownloadPromise
+  const backupDownloadPath = await backupDownload.path()
+  expect(backupDownloadPath).not.toBeNull()
+  expect(
+    JSON.parse(readFileSync(backupDownloadPath!, 'utf8')).settings.schemaVersion,
+  ).toBe(8)
+
+  page.once('dialog', (dialog) => dialog.accept())
+  await page
+    .getByRole('button', { name: 'Discard saved data and reset' })
+    .click()
+
+  await expect(alert).toHaveCount(0)
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const saved = window.localStorage.getItem('patchhive.workspace.v1')
+        return saved ? JSON.parse(saved).settings.schemaVersion : 0
+      }),
+    )
+    .toBe(8)
+})
+
+for (const scenario of [
+  {
+    kind: 'future',
+    recoveryTitle: 'Saved workspace is from a newer PatchHive',
+  },
+  {
+    kind: 'corrupt',
+    recoveryTitle: 'Saved workspace needs recovery',
+  },
+] as const) {
+  test(`protects a ${scenario.kind} cross-tab payload and reloads it into recovery`, async ({
+    context,
+    page,
+  }) => {
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Boolean(window.localStorage.getItem('patchhive.workspace.v1')),
+        ),
+      )
+      .toBe(true)
+    const otherPage = await context.newPage()
+    await otherPage.goto('/')
+    const externalRaw = await otherPage.evaluate(
+      ({ kind, storageKey }) => {
+        let payload: string
+
+        if (kind === 'future') {
+          const workspace = JSON.parse(
+            window.localStorage.getItem(storageKey) ?? '{}',
+          )
+          workspace.settings.schemaVersion = 9
+          workspace.missions[0].title = 'Future workspace from another tab'
+          payload = JSON.stringify(workspace)
+        } else {
+          payload = '{"cross-tab":"corrupt payload"'
+        }
+
+        window.localStorage.setItem(storageKey, payload)
+        return payload
+      },
+      {
+        kind: scenario.kind,
+        storageKey: 'patchhive.workspace.v1',
+      },
+    )
+
+    const alert = page.getByRole('alert')
+    await expect(alert).toContainText('Stored workspace changed elsewhere')
+    await expect(alert).toContainText(
+      'Another tab or PatchHive version changed the stored workspace',
+    )
+    await expect(page.getByRole('button', { name: 'Import JSON' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Reset sample' })).toBeDisabled()
+
+    await page.getByLabel('Show guidance').uncheck()
+    await expect(page.getByLabel('Show guidance')).not.toBeChecked()
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.localStorage.getItem('patchhive.workspace.v1'),
+        ),
+      )
+      .toBe(externalRaw)
+
+    const backupDownloadPromise = page.waitForEvent('download')
+    await page
+      .getByRole('button', { name: 'Download current workspace backup' })
+      .click()
+    const backupDownload = await backupDownloadPromise
+    const backupDownloadPath = await backupDownload.path()
+    expect(backupDownloadPath).not.toBeNull()
+    expect(
+      JSON.parse(readFileSync(backupDownloadPath!, 'utf8')).settings.showGuidance,
+    ).toBe(false)
+
+    await page
+      .getByRole('button', { name: 'Reload stored workspace' })
+      .click()
+    await expect(page.getByRole('alert')).toContainText(scenario.recoveryTitle)
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.localStorage.getItem('patchhive.workspace.v1'),
+        ),
+      )
+      .toBe(externalRaw)
+
+    await otherPage.close()
+  })
+}
+
+test('keeps working in memory after quota failure and persists on explicit retry', async ({
+  page,
+}) => {
+  await page.evaluate(() => window.localStorage.clear())
+  await page.addInitScript(() => {
+    const runtime = window as typeof window & {
+      __patchHiveQuota: boolean
+      __patchHiveSaveAttempts: number
+    }
+    const setItem = Storage.prototype.setItem
+    runtime.__patchHiveQuota = true
+    runtime.__patchHiveSaveAttempts = 0
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'patchhive.workspace.v1') {
+        runtime.__patchHiveSaveAttempts += 1
+        if (runtime.__patchHiveQuota) {
+          throw new DOMException('Storage quota exceeded', 'QuotaExceededError')
+        }
+      }
+
+      return setItem.call(this, key, value)
+    }
+  })
+  await page.reload()
+
+  const alert = page.getByRole('alert')
+  await expect(alert).toContainText('Browser storage is full')
+  const failedAttemptCount = await page.evaluate(
+    () =>
+      (
+        window as typeof window & {
+          __patchHiveSaveAttempts: number
+        }
+      ).__patchHiveSaveAttempts,
+  )
+
+  await page.getByLabel('Show guidance').uncheck()
+  await expect(page.getByLabel('Show guidance')).not.toBeChecked()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __patchHiveSaveAttempts: number
+            }
+          ).__patchHiveSaveAttempts,
+      ),
+    )
+    .toBe(failedAttemptCount)
+
+  await page.evaluate(() => {
+    ;(
+      window as typeof window & {
+        __patchHiveQuota: boolean
+      }
+    ).__patchHiveQuota = false
+  })
+  await page.getByRole('button', { name: 'Retry browser save' }).click()
+
+  await expect(alert).toHaveCount(0)
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const saved = window.localStorage.getItem('patchhive.workspace.v1')
+        return saved ? JSON.parse(saved).settings.showGuidance : null
+      }),
+    )
+    .toBe(false)
+})
+
+test('migrates a legacy local workspace and writes schema v8 back', async ({
+  page,
+}) => {
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Boolean(window.localStorage.getItem('patchhive.workspace.v1')),
+      ),
+    )
+    .toBe(true)
+  await page.evaluate(() => {
+    const key = 'patchhive.workspace.v1'
+    const workspace = JSON.parse(window.localStorage.getItem(key) ?? '{}')
+    workspace.settings.schemaVersion = 7
+    workspace.missions[0].title = 'Legacy browser workspace'
+    window.localStorage.setItem(key, JSON.stringify(workspace))
+  })
+  await page.reload()
+
+  await expect(
+    page.getByRole('heading', { name: 'Legacy browser workspace' }),
+  ).toBeVisible()
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const saved = window.localStorage.getItem('patchhive.workspace.v1')
+        return saved ? JSON.parse(saved).settings.schemaVersion : 0
+      }),
+    )
+    .toBe(8)
+})
+
 test('creates a mission, links evidence, and unlocks handoff export', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 820 })
   await page.getByRole('button', { name: 'Inspector' }).click()

@@ -30,6 +30,10 @@ and no external usability claim before real trial evidence exists.
 
 - [x] add portable agent-hygiene Action JSON intake and frozen cross-project fixtures
 - [x] carry declared source revision and complete-rerun provenance into handoff
+- [x] fail visibly and preserve recovery options when browser storage is
+  corrupt, newer than supported, full, or unavailable
+- [x] detect cross-tab storage conflicts before normal write or discard and
+  preserve the current in-memory workspace for backup
 - [ ] add opt-in redaction checks before Markdown copy/download
 - [ ] add shareable, non-secret handoff templates for issue and pull-request use
 - [ ] add import fixture contributions with a documented review rubric
