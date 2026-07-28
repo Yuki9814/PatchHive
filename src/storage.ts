@@ -15,9 +15,57 @@ import type {
   WorkspaceState,
 } from './types'
 
-const STORAGE_KEY = 'patchhive.workspace.v1'
+export const WORKSPACE_STORAGE_KEY = 'patchhive.workspace.v1'
 export const SCHEMA_VERSION = 8
 export const MAX_WORKSPACE_IMPORT_BYTES = 1_000_000
+export const MAX_WORKSPACE_JSON_DEPTH = 64
+export const WORKSPACE_RECOVERY_FORMAT = 'patchhive.storage-recovery.v1'
+
+export type WorkspaceLoadResult =
+  | {
+      status: 'missing' | 'valid' | 'migrated'
+      workspace: WorkspaceState
+      storedRaw: string | null
+    }
+  | {
+      status: 'corrupt'
+      workspace: WorkspaceState
+      rawPayload: string
+      storedRaw: string
+    }
+  | {
+      status: 'future-schema'
+      workspace: WorkspaceState
+      rawPayload: string
+      schemaVersion: number
+      storedRaw: string
+    }
+  | {
+      status: 'unavailable'
+      workspace: WorkspaceState
+      errorName: string
+    }
+
+export type WorkspaceStorageExpectation =
+  | {
+      status: 'known'
+      storedRaw: string | null
+    }
+  | {
+      status: 'unknown'
+    }
+
+export type WorkspaceSaveResult =
+  | { status: 'saved'; storedRaw: string }
+  | { status: 'conflict'; actualRaw: string | null }
+  | { status: 'quota'; errorName: string; observedRaw?: string | null }
+  | { status: 'unavailable'; errorName: string; observedRaw?: string | null }
+
+export type WorkspaceClearResult =
+  | { status: 'saved'; storedRaw: null }
+  | { status: 'conflict'; actualRaw: string | null }
+  | { status: 'quota'; errorName: string; observedRaw?: string | null }
+  | { status: 'unavailable'; errorName: string; observedRaw?: string | null }
 
 export type WorkspaceImportPreview = {
   workspace: WorkspaceState
@@ -66,18 +114,24 @@ function hasUniqueIds(items: Array<{ id: string }>) {
 }
 
 function isScanSeverity(value: unknown): value is ScanSeverity {
-  return ['critical', 'high', 'medium', 'low', 'info'].includes(String(value))
+  return (
+    value === 'critical' ||
+    value === 'high' ||
+    value === 'medium' ||
+    value === 'low' ||
+    value === 'info'
+  )
 }
 
 function isTriageStatus(value: unknown): value is EvidenceTriageStatus {
-  return ['open', 'accepted', 'resolved'].includes(String(value))
+  return value === 'open' || value === 'accepted' || value === 'resolved'
 }
 
 function isScannerResolution(value: unknown) {
   return (
     isRecord(value) &&
     value.method === 'complete-rerun' &&
-    ['json', 'sarif'].includes(String(value.format)) &&
+    (value.format === 'json' || value.format === 'sarif') &&
     typeof value.sourceName === 'string' &&
     (value.producerStatus === undefined ||
       value.producerStatus === 'declared' ||
@@ -94,7 +148,7 @@ function isEvidenceProvenance(value: unknown): value is EvidenceProvenance {
   return (
     isRecord(value) &&
     value.importer === 'agent-hygiene' &&
-    ['json', 'sarif'].includes(String(value.format)) &&
+    (value.format === 'json' || value.format === 'sarif') &&
     typeof value.sourceName === 'string' &&
     value.toolName === 'agent-hygiene' &&
     (value.producerStatus === undefined ||
@@ -187,7 +241,12 @@ function isLane(value: unknown) {
     typeof value.id === 'string' &&
     typeof value.name === 'string' &&
     typeof value.role === 'string' &&
-    ['idle', 'scanning', 'drafting', 'waiting', 'ready', 'blocked'].includes(String(value.status)) &&
+    (value.status === 'idle' ||
+      value.status === 'scanning' ||
+      value.status === 'drafting' ||
+      value.status === 'waiting' ||
+      value.status === 'ready' ||
+      value.status === 'blocked') &&
     typeof value.confidence === 'number' &&
     Array.isArray(value.findings) &&
     value.findings.every(
@@ -218,7 +277,11 @@ function isEvidence(value: unknown) {
   return (
     isRecord(value) &&
     typeof value.id === 'string' &&
-    ['file', 'log', 'decision', 'link', 'diff'].includes(String(value.kind)) &&
+    (value.kind === 'file' ||
+      value.kind === 'log' ||
+      value.kind === 'decision' ||
+      value.kind === 'link' ||
+      value.kind === 'diff') &&
     typeof value.title === 'string' &&
     typeof value.detail === 'string' &&
     (value.sourceText === undefined || typeof value.sourceText === 'string') &&
@@ -242,7 +305,9 @@ function isApproval(value: unknown) {
     isRecord(value) &&
     typeof value.id === 'string' &&
     typeof value.label === 'string' &&
-    ['low', 'medium', 'high'].includes(String(value.riskLevel)) &&
+    (value.riskLevel === 'low' ||
+      value.riskLevel === 'medium' ||
+      value.riskLevel === 'high') &&
     typeof value.requiredBefore === 'string' &&
     typeof value.approved === 'boolean' &&
     (value.approvedAt === undefined || typeof value.approvedAt === 'string')
@@ -271,7 +336,10 @@ function isMission(value: unknown) {
     (value.status === undefined || isMissionStatus(value.status)) &&
     typeof value.title === 'string' &&
     isRecord(value.source) &&
-    ['github-url', 'manual', 'diff-paste', 'log-paste'].includes(String(value.source.kind)) &&
+    (value.source.kind === 'github-url' ||
+      value.source.kind === 'manual' ||
+      value.source.kind === 'diff-paste' ||
+      value.source.kind === 'log-paste') &&
     typeof value.repo === 'string' &&
     typeof value.branch === 'string' &&
     typeof value.goal === 'string' &&
@@ -473,9 +541,48 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
   }
 }
 
+function exceedsWorkspaceJsonDepth(rawJson: string) {
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (const character of rawJson) {
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (character === '\\') {
+        escaped = true
+      } else if (character === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (character === '"') {
+      inString = true
+    } else if (character === '{' || character === '[') {
+      depth += 1
+
+      if (depth > MAX_WORKSPACE_JSON_DEPTH) {
+        return true
+      }
+    } else if (character === '}' || character === ']') {
+      depth -= 1
+    }
+  }
+
+  return false
+}
+
 export function parseWorkspaceImport(rawJson: string): WorkspaceState {
   if (new Blob([rawJson]).size > MAX_WORKSPACE_IMPORT_BYTES) {
     throw new Error('Workspace import is too large for local preview.')
+  }
+
+  if (exceedsWorkspaceJsonDepth(rawJson)) {
+    throw new Error(
+      `Workspace import exceeds the maximum JSON nesting depth of ${MAX_WORKSPACE_JSON_DEPTH}.`,
+    )
   }
 
   const parsed = JSON.parse(rawJson)
@@ -533,45 +640,218 @@ export function serializeWorkspaceExport(state: WorkspaceState) {
   )
 }
 
-export function loadWorkspace(): WorkspaceState {
-  if (typeof window === 'undefined') {
-    return createDefaultWorkspace()
-  }
-
-  try {
-    const saved = window.localStorage.getItem(STORAGE_KEY)
-
-    if (!saved) {
-      return createDefaultWorkspace()
-    }
-
-    const parsed = JSON.parse(saved)
-
-    if (!isWorkspace(parsed)) {
-      return createDefaultWorkspace()
-    }
-
-    return migrateWorkspace(parsed)
-  } catch {
-    return createDefaultWorkspace()
-  }
-}
-
-export function saveWorkspace(state: WorkspaceState) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.localStorage.setItem(
-    STORAGE_KEY,
-    serializeWorkspaceExport(state),
+export function serializeWorkspaceRecoveryEnvelope(
+  payload: string,
+  reason: 'corrupt' | 'future-schema',
+) {
+  return JSON.stringify(
+    {
+      format: WORKSPACE_RECOVERY_FORMAT,
+      storageKey: WORKSPACE_STORAGE_KEY,
+      payload,
+      reason,
+    },
+    null,
+    2,
   )
 }
 
-export function clearWorkspace() {
-  if (typeof window === 'undefined') {
-    return
+function getStorageErrorName(error: unknown) {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    typeof error.name === 'string' &&
+    error.name
+      ? error.name
+      : 'UnknownError'
+  )
+}
+
+function classifyStorageWriteError(
+  error: unknown,
+  observedRaw?: string | null,
+): Extract<WorkspaceSaveResult, { status: 'quota' | 'unavailable' }> {
+  const errorName = getStorageErrorName(error)
+  const errorCode =
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'number'
+      ? error.code
+      : undefined
+  const quotaExceeded =
+    errorName === 'QuotaExceededError' ||
+    errorName === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    errorCode === 22 ||
+    errorCode === 1014
+
+  if (quotaExceeded) {
+    return {
+      status: 'quota',
+      errorName,
+      ...(observedRaw !== undefined ? { observedRaw } : {}),
+    }
   }
 
-  window.localStorage.removeItem(STORAGE_KEY)
+  return {
+    status: 'unavailable',
+    errorName,
+    ...(observedRaw !== undefined ? { observedRaw } : {}),
+  }
+}
+
+export function loadWorkspace(): WorkspaceLoadResult {
+  const workspace = createDefaultWorkspace()
+
+  if (typeof window === 'undefined') {
+    return {
+      status: 'unavailable',
+      workspace,
+      errorName: 'WindowUnavailable',
+    }
+  }
+
+  let saved: string | null
+
+  try {
+    saved = window.localStorage.getItem(WORKSPACE_STORAGE_KEY)
+  } catch (error) {
+    return {
+      status: 'unavailable',
+      workspace,
+      errorName: getStorageErrorName(error),
+    }
+  }
+
+  if (saved === null) {
+    return { status: 'missing', workspace, storedRaw: null }
+  }
+
+  if (exceedsWorkspaceJsonDepth(saved)) {
+    return {
+      status: 'corrupt',
+      workspace,
+      rawPayload: saved,
+      storedRaw: saved,
+    }
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(saved)
+
+    if (
+      isRecord(parsed) &&
+      isRecord(parsed.settings) &&
+      typeof parsed.settings.schemaVersion === 'number' &&
+      parsed.settings.schemaVersion > SCHEMA_VERSION
+    ) {
+      return {
+        status: 'future-schema',
+        workspace,
+        rawPayload: saved,
+        schemaVersion: parsed.settings.schemaVersion,
+        storedRaw: saved,
+      }
+    }
+
+    if (!isWorkspace(parsed)) {
+      return {
+        status: 'corrupt',
+        workspace,
+        rawPayload: saved,
+        storedRaw: saved,
+      }
+    }
+
+    const migratedWorkspace = migrateWorkspace(parsed)
+
+    return {
+      status:
+        parsed.settings.schemaVersion === SCHEMA_VERSION ? 'valid' : 'migrated',
+      workspace: migratedWorkspace,
+      storedRaw: saved,
+    }
+  } catch {
+    return {
+      status: 'corrupt',
+      workspace,
+      rawPayload: saved,
+      storedRaw: saved,
+    }
+  }
+}
+
+export function saveWorkspace(
+  state: WorkspaceState,
+  expectation: WorkspaceStorageExpectation,
+): WorkspaceSaveResult {
+  if (typeof window === 'undefined') {
+    return {
+      status: 'unavailable',
+      errorName: 'WindowUnavailable',
+    }
+  }
+
+  const serialized = serializeWorkspaceExport(state)
+  let observedRaw: string | null | undefined
+
+  if (expectation.status === 'known') {
+    try {
+      observedRaw = window.localStorage.getItem(WORKSPACE_STORAGE_KEY)
+    } catch (error) {
+      return {
+        status: 'unavailable',
+        errorName: getStorageErrorName(error),
+      }
+    }
+
+    if (observedRaw !== expectation.storedRaw) {
+      return {
+        status: 'conflict',
+        actualRaw: observedRaw,
+      }
+    }
+  }
+
+  try {
+    window.localStorage.setItem(WORKSPACE_STORAGE_KEY, serialized)
+    return { status: 'saved', storedRaw: serialized }
+  } catch (error) {
+    return classifyStorageWriteError(error, observedRaw)
+  }
+}
+
+export function clearWorkspace(expectedRaw: string | null): WorkspaceClearResult {
+  if (typeof window === 'undefined') {
+    return {
+      status: 'unavailable',
+      errorName: 'WindowUnavailable',
+    }
+  }
+
+  let observedRaw: string | null
+
+  try {
+    observedRaw = window.localStorage.getItem(WORKSPACE_STORAGE_KEY)
+  } catch (error) {
+    return {
+      status: 'unavailable',
+      errorName: getStorageErrorName(error),
+    }
+  }
+
+  if (observedRaw !== expectedRaw) {
+    return {
+      status: 'conflict',
+      actualRaw: observedRaw,
+    }
+  }
+
+  try {
+    window.localStorage.removeItem(WORKSPACE_STORAGE_KEY)
+    return { status: 'saved', storedRaw: null }
+  } catch (error) {
+    return classifyStorageWriteError(error, observedRaw)
+  }
 }

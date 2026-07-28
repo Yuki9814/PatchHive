@@ -13,6 +13,7 @@ type MissionSidebarProps = {
   onExportWorkspace: () => void
   onImportWorkspace: (event: ChangeEvent<HTMLInputElement>) => void
   onResetWorkspace: () => void
+  storageRecoveryLocked: boolean
   dispatch: Dispatch<WorkspaceAction>
 }
 
@@ -25,6 +26,7 @@ export function MissionSidebar({
   onExportWorkspace,
   onImportWorkspace,
   onResetWorkspace,
+  storageRecoveryLocked,
   dispatch,
 }: MissionSidebarProps) {
   const visibleMissions = getFilteredMissions(state.missions, state.settings.missionStatusFilter)
@@ -125,10 +127,22 @@ export function MissionSidebar({
           <button className="subtle-button" type="button" onClick={onExportWorkspace}>
             Export JSON
           </button>
-          <button className="subtle-button" type="button" onClick={() => importInputRef.current?.click()}>
+          <button
+            aria-describedby={storageRecoveryLocked ? 'storage-recovery-detail' : undefined}
+            className="subtle-button"
+            type="button"
+            disabled={storageRecoveryLocked}
+            onClick={() => importInputRef.current?.click()}
+          >
             Import JSON
           </button>
-          <button className="subtle-button" type="button" onClick={onResetWorkspace}>
+          <button
+            aria-describedby={storageRecoveryLocked ? 'storage-recovery-detail' : undefined}
+            className="subtle-button"
+            type="button"
+            disabled={storageRecoveryLocked}
+            onClick={onResetWorkspace}
+          >
             Reset sample
           </button>
         </div>
