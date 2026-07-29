@@ -339,6 +339,68 @@ test('creates a mission, links evidence, and unlocks handoff export', async ({ p
   await expect(page.getByRole('button', { name: 'Copy Markdown' })).toBeEnabled()
 })
 
+test('opts into local privacy preflight and downloads only redacted Markdown', async ({
+  page,
+}) => {
+  const token = await page.evaluate(() => {
+    const runtimeToken = `ghp_${'A'.repeat(36)}`
+    const storageKey = 'patchhive.workspace.v1'
+    const workspace = JSON.parse(
+      window.localStorage.getItem(storageKey) ?? '{}',
+    )
+    const mission = workspace.missions[0]
+    mission.approvals = mission.approvals.map(
+      (approval: Record<string, unknown>) => ({
+        ...approval,
+        approved: true,
+        approvedAt: '2026-07-29T00:00:00.000Z',
+      }),
+    )
+    mission.outputs.fieldSources = {
+      summary: [mission.evidence[0].id],
+    }
+    mission.outputs.maintainerComment =
+      `Share the handoff after removing ${runtimeToken}.`
+    window.localStorage.setItem(storageKey, JSON.stringify(workspace))
+    return runtimeToken
+  })
+  await page.reload()
+
+  const privacyToggle = page.getByRole('checkbox', {
+    name: 'Run local privacy preflight',
+  })
+  await expect(privacyToggle).not.toBeChecked()
+  await expect(page.getByRole('button', { name: 'Copy Markdown' })).toBeEnabled()
+
+  await privacyToggle.check()
+  await expect(
+    page.getByRole('button', { name: 'Copy redacted Markdown' }),
+  ).toBeEnabled()
+  await expect(
+    page.getByRole('button', { name: 'Download redacted' }),
+  ).toBeEnabled()
+  await expect(page.getByRole('status')).toContainText(
+    '1 potential sensitive value(s) masked',
+  )
+  await expect(
+    page.getByRole('list', { name: 'Privacy preflight findings' }),
+  ).toContainText(/GitHub token · line \d+/)
+
+  await page.getByText('Redacted Markdown preview', { exact: true }).click()
+  const preview = page.locator('.handoff-preview pre')
+  await expect(preview).toContainText('[REDACTED: github-token]')
+  await expect(preview).not.toContainText(token)
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download redacted' }).click()
+  const download = await downloadPromise
+  const downloadPath = await download.path()
+  expect(downloadPath).not.toBeNull()
+  const downloadedMarkdown = readFileSync(downloadPath!, 'utf8')
+  expect(downloadedMarkdown).toContain('[REDACTED: github-token]')
+  expect(downloadedMarkdown).not.toContain(token)
+})
+
 test('rejects invalid workspace JSON imports', async ({ page }) => {
   await page.getByRole('button', { name: 'Import JSON' }).click()
   await page.getByLabel('Import workspace JSON').setInputFiles({

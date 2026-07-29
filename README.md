@@ -64,6 +64,30 @@ declarations, not signatures. The frozen finding/clean-rerun pair and exact
 SHA-256 digests are documented in the
 [v0.4 interoperability note](docs/interop-v0.4.0.md).
 
+## Local handoff privacy preflight
+
+The Handoff panel offers an optional, local privacy preflight before Markdown
+leaves the browser. It is off by default to preserve the existing export
+workflow. When enabled, the preview, clipboard, and download all use the same
+deterministically redacted Markdown.
+
+The bounded check recognizes high-confidence PEM private-key headers and blocks,
+GitHub tokens, AWS access key IDs, bearer tokens, JSON Web Tokens, credential
+URLs using HTTP(S), PostgreSQL, MySQL, MariaDB, Redis, or MongoDB schemes, and
+explicit secret, token, password, or API-key assignments. An unclosed supported
+private-key header is masked through the end of the Markdown while preserving
+line breaks. Findings show only a category and original line number; matched
+values are never displayed in the report. Overlapping matches are coalesced
+across their full range and use the highest-confidence contextual mask.
+Checked export locks if Markdown exceeds 2,000,000 characters, resolved
+findings exceed 500, a credential assignment value exceeds 16,384 characters,
+or a quoted credential value is unclosed or ambiguously terminated.
+
+This pattern check is not a secret scanner or a safety guarantee. A zero-match
+result does not mean the handoff is safe. Review the redacted preview before
+sharing it. The check makes no network request, does not persist its opt-in
+state, and does not change the workspace schema.
+
 ## What works
 
 - PR Rescue, Issue Intake, and Release Brief mission templates
@@ -76,6 +100,7 @@ SHA-256 digests are documented in the
 - portable agent-hygiene Action JSON intake with declared source revisions
 - stages, structured maintainer lanes, findings, and human approval gates
 - handoff readiness checks and evidence-source coverage
+- opt-in local privacy preflight with deterministic Markdown masking
 - Markdown copy/download plus versioned workspace import/export
 - schema v1-v7 migration to schema v8 without changing the browser key
 - responsive desktop/mobile workflow and keyboard-accessible controls
@@ -101,6 +126,10 @@ Scanner and workspace files are untrusted input. PatchHive:
 - blocks handoff when an accepted scanner risk lacks a non-empty resolution note
 - reopens legacy or forged resolved scanner findings without complete-rerun provenance
 - neutralizes imported mentions, issue references, and automatic links in Markdown
+- fails closed instead of exporting partially checked Markdown when the optional
+  privacy preflight exceeds its 2,000,000-character, 500-match, or
+  16,384-character credential-value bound, or finds an unclosed or ambiguously
+  terminated quoted credential value
 - ships a production CSP with network connections disabled and uses no runtime
   dependencies beyond React
 

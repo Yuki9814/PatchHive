@@ -9,6 +9,32 @@ import {
   serializeWorkspaceExport,
 } from './storage'
 
+function readyWorkspaceWithMaintainerComment(maintainerComment: string) {
+  const workspace = createDefaultWorkspace()
+  const mission = workspace.missions[0]
+
+  return {
+    ...workspace,
+    missions: [
+      {
+        ...mission,
+        approvals: mission.approvals.map((approval) => ({
+          ...approval,
+          approved: true,
+          approvedAt: '2026-07-29T00:00:00.000Z',
+        })),
+        outputs: {
+          ...mission.outputs,
+          maintainerComment,
+          fieldSources: {
+            summary: [mission.evidence[0].id],
+          },
+        },
+      },
+    ],
+  }
+}
+
 describe('App workflow', () => {
   beforeEach(() => {
     window.localStorage.clear()
@@ -69,6 +95,109 @@ describe('App workflow', () => {
     expect(screen.getByRole('button', { name: /copy markdown/i })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: /copy markdown/i }))
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Regression proof'))
+  })
+
+  it('keeps handoff privacy preflight opt-in and copies only masked Markdown when enabled', async () => {
+    const user = userEvent.setup()
+    const token = `ghp_${'A'.repeat(36)}`
+    const workspace = readyWorkspaceWithMaintainerComment(
+      `Share this handoff with ${token} removed.`,
+    )
+    window.localStorage.setItem(
+      WORKSPACE_STORAGE_KEY,
+      serializeWorkspaceExport(workspace),
+    )
+    const writeText = vi
+      .spyOn(navigator.clipboard, 'writeText')
+      .mockResolvedValue(undefined)
+
+    const { unmount } = render(<App />)
+
+    const privacyToggle = screen.getByRole('checkbox', {
+      name: /run local privacy preflight/i,
+    })
+    expect(privacyToggle).not.toBeChecked()
+    expect(
+      screen.getByRole('button', { name: /^copy markdown$/i }),
+    ).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: /^copy markdown$/i }))
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining(token))
+
+    writeText.mockClear()
+    await user.click(privacyToggle)
+
+    expect(
+      screen.getByRole('button', { name: /copy redacted markdown/i }),
+    ).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: /download redacted/i }),
+    ).toBeEnabled()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '1 potential sensitive value(s) masked',
+    )
+    expect(
+      screen.getByRole('list', { name: /privacy preflight findings/i }),
+    ).toHaveTextContent(/GitHub token · line \d+/i)
+    expect(
+      screen.getByText(/zero-match result does not mean/i),
+    ).toBeInTheDocument()
+
+    await user.click(
+      screen.getByText('Redacted Markdown preview', { selector: 'summary' }),
+    )
+    const preview = screen
+      .getByText('Redacted Markdown preview', { selector: 'summary' })
+      .closest('details')
+    expect(preview).not.toBeNull()
+    expect(within(preview as HTMLElement).getByText(/\[REDACTED: github-token\]/)).toBeInTheDocument()
+    expect(within(preview as HTMLElement).queryByText(token)).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: /copy redacted markdown/i }),
+    )
+    expect(writeText).toHaveBeenCalledTimes(1)
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('[REDACTED: github-token]'),
+    )
+    expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining(token))
+
+    unmount()
+    render(<App />)
+
+    expect(
+      screen.getByRole('checkbox', {
+        name: /run local privacy preflight/i,
+      }),
+    ).not.toBeChecked()
+    expect(
+      screen.getByRole('button', { name: /^copy markdown$/i }),
+    ).toBeEnabled()
+  })
+
+  it('does not present a zero-match privacy preflight as a safety guarantee', async () => {
+    const user = userEvent.setup()
+    const workspace = readyWorkspaceWithMaintainerComment(
+      'Review the local evidence before sharing this handoff.',
+    )
+    window.localStorage.setItem(
+      WORKSPACE_STORAGE_KEY,
+      serializeWorkspaceExport(workspace),
+    )
+
+    render(<App />)
+    await user.click(
+      screen.getByRole('checkbox', {
+        name: /run local privacy preflight/i,
+      }),
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'No configured sensitive patterns matched',
+    )
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'This is not a safety guarantee',
+    )
   })
 
   it('archives missions and filters them from the active list', async () => {

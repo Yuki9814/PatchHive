@@ -14,6 +14,7 @@ import type {
   EvidenceTriageFilter,
 } from './evidenceView'
 import { buildHandoffMarkdown, getHandoffBlockers, getNextStageGateBlocker } from './handoff'
+import { runHandoffPrivacyPreflight } from './handoffPrivacy'
 import { getHandoffFieldStatuses, getMissionHealth } from './missionHealth'
 import {
   MAX_WORKSPACE_IMPORT_BYTES,
@@ -133,6 +134,8 @@ function App() {
   const [editingEvidenceId, setEditingEvidenceId] = useState<string | null>(null)
   const [findingDrafts, setFindingDrafts] = useState<Record<string, string>>({})
   const [statusMessage, setStatusMessage] = useState('Workspace loaded.')
+  const [handoffPrivacyPreflightEnabled, setHandoffPrivacyPreflightEnabled] =
+    useState(false)
   const [storageIssue, setStorageIssue] = useState<StorageRecoveryIssue | null>(
     () => getInitialStorageIssue(initialLoad),
   )
@@ -303,6 +306,13 @@ function App() {
     evidenceStageFilter,
     evidenceTriageFilter,
   ])
+  const handoffPrivacyPreflight = useMemo(
+    () =>
+      handoffPrivacyPreflightEnabled && derivedWorkspace
+        ? runHandoffPrivacyPreflight(derivedWorkspace.handoffMarkdown)
+        : null,
+    [derivedWorkspace, handoffPrivacyPreflightEnabled],
+  )
 
   if (!activeMission || !activeStage || !derivedWorkspace) {
     return (
@@ -326,6 +336,11 @@ function App() {
     nextStageGateBlocker,
     unlinkedEvidenceCount,
   } = derivedWorkspace
+  const exportHandoffMarkdown = handoffPrivacyPreflightEnabled
+    ? handoffPrivacyPreflight?.status === 'checked'
+      ? handoffPrivacyPreflight.redactedMarkdown
+      : ''
+    : handoffMarkdown
 
   const handleTemplateChange = (templateId: string) => {
     setComposer(createComposerInput(getTemplate(templateId)))
@@ -488,9 +503,23 @@ function App() {
       return
     }
 
+    if (
+      handoffPrivacyPreflightEnabled &&
+      handoffPrivacyPreflight?.status !== 'checked'
+    ) {
+      setStatusMessage(
+        'Handoff export is locked because the local privacy preflight could not complete.',
+      )
+      return
+    }
+
     try {
-      await navigator.clipboard.writeText(handoffMarkdown)
-      setStatusMessage('Handoff Markdown copied.')
+      await navigator.clipboard.writeText(exportHandoffMarkdown)
+      setStatusMessage(
+        handoffPrivacyPreflightEnabled
+          ? `Redacted handoff Markdown copied after ${handoffPrivacyPreflight?.findings.length ?? 0} local mask(s).`
+          : 'Handoff Markdown copied.',
+      )
     } catch {
       setStatusMessage('Clipboard access failed. Use the preview or download instead.')
     }
@@ -502,12 +531,35 @@ function App() {
       return
     }
 
+    if (
+      handoffPrivacyPreflightEnabled &&
+      handoffPrivacyPreflight?.status !== 'checked'
+    ) {
+      setStatusMessage(
+        'Handoff export is locked because the local privacy preflight could not complete.',
+      )
+      return
+    }
+
     downloadLocalFile(
-      handoffMarkdown,
+      exportHandoffMarkdown,
       'text/markdown;charset=utf-8',
       `${activeMission.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-handoff.md`,
     )
-    setStatusMessage('Handoff Markdown downloaded.')
+    setStatusMessage(
+      handoffPrivacyPreflightEnabled
+        ? `Redacted handoff Markdown downloaded after ${handoffPrivacyPreflight?.findings.length ?? 0} local mask(s).`
+        : 'Handoff Markdown downloaded.',
+    )
+  }
+
+  const setPrivacyPreflightEnabled = (enabled: boolean) => {
+    setHandoffPrivacyPreflightEnabled(enabled)
+    setStatusMessage(
+      enabled
+        ? 'Local handoff privacy preflight enabled. Review the masked preview before sharing.'
+        : 'Local handoff privacy preflight disabled. Export compatibility mode restored.',
+    )
   }
 
   const exportWorkspace = () => {
@@ -800,7 +852,9 @@ function App() {
         filteredEvidence={filteredEvidence}
         handoffBlockers={handoffBlockers}
         handoffFieldStatusMap={handoffFieldStatusMap}
-        handoffMarkdown={handoffMarkdown}
+        handoffMarkdown={exportHandoffMarkdown}
+        handoffPrivacyPreflight={handoffPrivacyPreflight}
+        handoffPrivacyPreflightEnabled={handoffPrivacyPreflightEnabled}
         handoffReady={handoffReady}
         mission={activeMission}
         onCancelEvidenceEdit={cancelEvidenceEdit}
@@ -816,6 +870,7 @@ function App() {
         onStartEvidenceEdit={startEvidenceEdit}
         onStatusMessage={setStatusMessage}
         onSubmitEvidence={submitEvidence}
+        onToggleHandoffPrivacyPreflight={setPrivacyPreflightEnabled}
         unlinkedEvidenceCount={unlinkedEvidenceCount}
       />
 

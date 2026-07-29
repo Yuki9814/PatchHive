@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.5.0 - 2026-07-29
+
+- Add an optional, entirely local privacy preflight for final handoff Markdown.
+  When enabled, preview, clipboard, and download use the same deterministic
+  masks for bounded, high-confidence credential patterns while the findings
+  list exposes only category and original line number.
+- Keep the preflight setting ephemeral and schema-neutral. Default-off exports
+  remain compatible. Checked export locks on input, match-count, or
+  credential-value overflow, and on an unclosed or ambiguously terminated
+  quoted credential value, rather than exporting partially checked Markdown.
+- Coalesce overlapping findings across the complete sensitive range, scan
+  private-key headers in bounded forward time, and mask an unclosed supported
+  header through the end of the Markdown.
+- Bound credential-name, credential-value, credential-URL-component, and
+  JWT-segment matching so delimiter-free near-limit input remains linear and
+  responsive. Oversized or unclosed credential assignment values now lock
+  checked export instead of producing a partial mask; quoted values honor
+  escaped quotes and require a clear terminator after the real closing quote.
+- Preserve private-key line breaks without allocating an intermediate array
+  proportional to the number of line breaks.
+- Recognize credential-bearing HTTP(S), PostgreSQL, MySQL, MariaDB, Redis, and
+  MongoDB URLs plus explicit alphabetic password and passwd assignments while
+  continuing to ignore configured placeholders and environment references.
+- Document that this pattern check is not a safety guarantee and that a
+  zero-match result still requires manual review before sharing.
+
 ## 0.4.1 - 2026-07-28
 
 - Classify browser workspace loads as missing, valid, migrated, corrupt,
