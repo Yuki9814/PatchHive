@@ -65,6 +65,20 @@ Workspace and scanner files are untrusted input:
 - dangling workspace references are repaired and critical duplicate IDs are rejected
 - incomplete scans, undocumented accepted risks, and unevidenced resolved
   findings cannot silently become a ready handoff
+- the optional handoff privacy preflight runs only on the final local Markdown,
+  reports category and original line number without displaying matched values,
+  and applies deterministic masks to preview, clipboard, and download
+- overlapping privacy matches coalesce across their full range under the
+  highest-confidence contextual mask; supported unclosed private-key headers
+  are masked through the end of the Markdown while preserving line breaks
+- private-key matching is a bounded forward scan; a preflight that exceeds its
+  input, match-count, or 16,384-character credential-value bound locks export,
+  as does an unclosed or ambiguously terminated quoted credential value
+- credential assignment names and values, credential URL components, and each
+  JWT segment have explicit scan-length bounds so malformed near-limit input
+  cannot trigger unbounded regular-expression backtracking
+- private-key line-break preservation removes non-line-break runs directly
+  instead of materializing a per-line-break match array
 
 The production content security policy disables all network connections; local
 development permits only the Vite loopback WebSocket used for hot reload and
@@ -78,7 +92,16 @@ npm registry, and CI runs the full dependency audit.
 Do not paste credentials, private keys, access tokens, private customer data, or
 unsanitized proprietary source. Treat browser profiles, recovery envelopes, and
 downloaded workspace exports as sensitive. Review handoff Markdown before
-sharing it.
+sharing it. The privacy preflight is off by default and recognizes only
+configured high-confidence patterns, including credential-bearing HTTP(S),
+PostgreSQL, MySQL, MariaDB, Redis, and MongoDB URLs. Explicit password and
+passwd assignments are masked at 12 characters even when alphabetic, except
+for configured placeholders and environment references. An unclosed or
+over-16,384-character credential assignment locks checked export instead of
+partially masking its value. Quoted assignments honor escaped quotes and
+require a terminating delimiter after the real closing quote; ambiguous
+suffixes also lock checked export. False negatives are possible, and a
+zero-match result is not proof that the handoff is safe.
 
 ## Supported versions
 
