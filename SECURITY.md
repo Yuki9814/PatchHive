@@ -74,9 +74,10 @@ Workspace and scanner files are untrusted input:
 - private-key matching is a bounded forward scan; a preflight that exceeds its
   input, match-count, or 16,384-character credential-value bound locks export,
   as does an unclosed or ambiguously terminated quoted credential value
-- credential assignment names and values, credential URL components, and each
-  JWT segment have explicit scan-length bounds so malformed near-limit input
-  cannot trigger unbounded regular-expression backtracking
+- credential assignment names and values plus credential URL components have
+  explicit scan-length bounds; JWT candidates use one forward pass and a
+  fixed-size header window so malformed near-limit input cannot trigger
+  repeated suffix scans
 - private-key line-break preservation removes non-line-break runs directly
   instead of materializing a per-line-break match array
 

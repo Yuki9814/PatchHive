@@ -8,6 +8,11 @@ const MAX_CREDENTIAL_URL_COMPONENT_CHARACTERS = 512
 const MAX_JWT_HEADER_CHARACTERS = 1_024
 const MAX_JWT_PAYLOAD_CHARACTERS = 16_384
 const MAX_JWT_SIGNATURE_CHARACTERS = 4_096
+const MIN_JWT_HEADER_CHARACTERS = 10
+const MIN_JWT_PAYLOAD_CHARACTERS = 10
+const MIN_JWT_SIGNATURE_CHARACTERS = 16
+const MAX_JWT_HEADER_TOTAL_CHARACTERS =
+  'eyJ'.length + MAX_JWT_HEADER_CHARACTERS
 
 export type HandoffPrivacyCategory =
   | 'private-key'
@@ -180,6 +185,25 @@ function isQuotedCredentialTerminator(character: string | undefined) {
     character === ']' ||
     character === ')'
   )
+}
+
+function isAsciiWordCharacter(character: string | undefined) {
+  if (!character) {
+    return false
+  }
+
+  const code = character.charCodeAt(0)
+
+  return (
+    (code >= 48 && code <= 57) ||
+    (code >= 65 && code <= 90) ||
+    code === 95 ||
+    (code >= 97 && code <= 122)
+  )
+}
+
+function isJwtSegmentCharacter(character: string | undefined) {
+  return isAsciiWordCharacter(character) || character === '-'
 }
 
 function collectCapturedCredential(
@@ -415,6 +439,176 @@ function collectPrivateKeys(
   }
 }
 
+function collectJwtCredentials(
+  markdown: string,
+  collector: CandidateCollector,
+) {
+  if (collector.overflowed || collector.blockedReason) {
+    return
+  }
+
+  const headerQueue = new Int32Array(
+    MAX_JWT_HEADER_TOTAL_CHARACTERS + 1,
+  )
+  let headerQueueHead = 0
+  let headerQueueSize = 0
+  let previousDot = -1
+  let pendingHeaderStart: number | null = null
+  let signature:
+    | {
+        tokenStart: number
+        start: number
+        lastBoundaryEnd: number | null
+      }
+    | null = null
+
+  const resetHeaderQueue = () => {
+    headerQueueHead = 0
+    headerQueueSize = 0
+  }
+
+  const pruneHeaderQueue = (end: number) => {
+    while (
+      headerQueueSize > 0 &&
+      end - headerQueue[headerQueueHead] >
+        MAX_JWT_HEADER_TOTAL_CHARACTERS
+    ) {
+      headerQueueHead =
+        (headerQueueHead + 1) % headerQueue.length
+      headerQueueSize -= 1
+    }
+  }
+
+  const enqueueHeaderStart = (start: number) => {
+    pruneHeaderQueue(start + 1)
+    const tail =
+      (headerQueueHead + headerQueueSize) % headerQueue.length
+    headerQueue[tail] = start
+    headerQueueSize += 1
+  }
+
+  const headerStartAt = (end: number) => {
+    pruneHeaderQueue(end)
+
+    if (headerQueueSize === 0) {
+      return null
+    }
+
+    const start = headerQueue[headerQueueHead]
+    return end - start >= MIN_JWT_HEADER_CHARACTERS
+      ? start
+      : null
+  }
+
+  const finishSignature = (end: number) => {
+    if (!signature) {
+      return false
+    }
+
+    const length = end - signature.start
+    if (
+      length >= MIN_JWT_SIGNATURE_CHARACTERS &&
+      length <= MAX_JWT_SIGNATURE_CHARACTERS &&
+      isAsciiWordCharacter(markdown[end - 1])
+    ) {
+      signature.lastBoundaryEnd = end
+    }
+
+    const matched = signature.lastBoundaryEnd !== null
+    if (matched) {
+      if (
+        !addCandidate(collector, {
+          category: 'jwt',
+          start: signature.tokenStart,
+          end,
+          priority: 70,
+          replacement: redactionLabel('jwt'),
+        })
+      ) {
+        signature = null
+        return true
+      }
+    }
+
+    signature = null
+    return matched
+  }
+
+  for (let index = 0; index <= markdown.length; index += 1) {
+    const character = markdown[index]
+    const atEnd = index === markdown.length
+    const jwtCharacter = isJwtSegmentCharacter(character)
+    const dot = character === '.'
+
+    if (signature && !atEnd && jwtCharacter) {
+      const signatureLength = index - signature.start
+
+      if (
+        signatureLength >= MIN_JWT_SIGNATURE_CHARACTERS &&
+        signatureLength <= MAX_JWT_SIGNATURE_CHARACTERS &&
+        isAsciiWordCharacter(markdown[index - 1]) !==
+          isAsciiWordCharacter(character)
+      ) {
+        signature.lastBoundaryEnd = index
+      }
+    }
+
+    if (atEnd || !jwtCharacter) {
+      const currentHeaderStart = dot ? headerStartAt(index) : null
+      const matchedJwt = finishSignature(index)
+
+      if (collector.overflowed || collector.blockedReason) {
+        return
+      }
+
+      if (dot) {
+        if (matchedJwt) {
+          pendingHeaderStart = currentHeaderStart
+          previousDot = index
+        } else {
+          const payloadLength =
+            previousDot === -1 ? -1 : index - previousDot - 1
+          const nextSignature =
+            pendingHeaderStart !== null &&
+            payloadLength >= MIN_JWT_PAYLOAD_CHARACTERS &&
+            payloadLength <= MAX_JWT_PAYLOAD_CHARACTERS
+              ? {
+                  tokenStart: pendingHeaderStart,
+                  start: index + 1,
+                  lastBoundaryEnd: null,
+                }
+              : null
+
+          pendingHeaderStart = currentHeaderStart
+          previousDot = index
+          signature = nextSignature
+        }
+      } else {
+        pendingHeaderStart = null
+        previousDot = -1
+      }
+
+      resetHeaderQueue()
+
+      if (atEnd) {
+        break
+      }
+
+      continue
+    }
+
+    pruneHeaderQueue(index + 1)
+    if (
+      character === 'e' &&
+      markdown[index + 1] === 'y' &&
+      markdown[index + 2] === 'J' &&
+      !isAsciiWordCharacter(markdown[index - 1])
+    ) {
+      enqueueHeaderStart(index)
+    }
+  }
+}
+
 function collectCandidates(markdown: string) {
   const collector: CandidateCollector = {
     candidates: [],
@@ -447,18 +641,7 @@ function collectCandidates(markdown: string) {
     'aws-access-key-id',
     75,
   )
-  collectWholeMatches(
-    markdown,
-    collector,
-    new RegExp(
-      `\\beyJ[A-Za-z0-9_-]{7,${MAX_JWT_HEADER_CHARACTERS}}\\.` +
-        `[A-Za-z0-9_-]{10,${MAX_JWT_PAYLOAD_CHARACTERS}}\\.` +
-        `[A-Za-z0-9_-]{16,${MAX_JWT_SIGNATURE_CHARACTERS}}\\b`,
-      'g',
-    ),
-    'jwt',
-    70,
-  )
+  collectJwtCredentials(markdown, collector)
 
   return collector
 }
