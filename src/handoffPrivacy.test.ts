@@ -10,8 +10,8 @@ function githubToken(character = 'A') {
   return `ghp_${character.repeat(36)}`
 }
 
-function jwt() {
-  return `eyJ${'a'.repeat(8)}.${'b'.repeat(12)}.${'c'.repeat(20)}`
+function jwt(character = 'a') {
+  return `eyJ${character.repeat(8)}.${character.repeat(12)}.${character.repeat(20)}`
 }
 
 describe('handoff privacy preflight', () => {
@@ -111,6 +111,127 @@ describe('handoff privacy preflight', () => {
     expect(result.redactedMarkdown).not.toContain(assignedToken)
     expect(result.redactedMarkdown).not.toContain(jsonWebToken)
     expect(result.redactedMarkdown).not.toContain(embeddedToken)
+  })
+
+  it('preserves JWT segment limits and masks adjacent valid tokens', () => {
+    const minimumJwt =
+      `eyJ${'a'.repeat(7)}.${'b'.repeat(10)}.${'c'.repeat(16)}`
+    const maximumJwt =
+      `eyJ${'d'.repeat(1_024)}.${'e'.repeat(16_384)}.${'f'.repeat(4_096)}`
+    const markdown = `${minimumJwt} ${maximumJwt}`
+    const result = runHandoffPrivacyPreflight(markdown)
+
+    expect(result.status).toBe('checked')
+
+    if (result.status !== 'checked') {
+      throw new Error('Expected a checked privacy preflight.')
+    }
+
+    expect(result.findings).toEqual([
+      { category: 'jwt', line: 1 },
+      { category: 'jwt', line: 1 },
+    ])
+    expect(result.redactedMarkdown).toBe(
+      '[REDACTED: jwt] [REDACTED: jwt]',
+    )
+  })
+
+  it('masks chained JWTs without exposing later segments', () => {
+    const first = jwt('a')
+    const second = jwt('b')
+    const third = jwt('c')
+    const markdown = `${first}-${second}-${third}`
+    const result = runHandoffPrivacyPreflight(markdown)
+
+    expect(result.status).toBe('checked')
+
+    if (result.status !== 'checked') {
+      throw new Error('Expected a checked privacy preflight.')
+    }
+
+    expect(result.findings).toEqual([
+      { category: 'jwt', line: 1 },
+    ])
+    expect(result.redactedMarkdown).toBe('[REDACTED: jwt]')
+
+    for (const token of [first, second, third]) {
+      expect(result.redactedMarkdown).not.toContain(token)
+    }
+  })
+
+  it('does not promote an incomplete nested JWT header to a finding', () => {
+    const valid = jwt('d')
+    const nestedHeader = `eyJ${'e'.repeat(7)}`
+    const invalidTokens = [
+      `${valid}-${nestedHeader}.short`,
+      `${valid}-${nestedHeader}.${'f'.repeat(10)}.short`,
+    ]
+
+    for (const markdown of invalidTokens) {
+      const result = runHandoffPrivacyPreflight(markdown)
+
+      expect(result.status).toBe('checked')
+
+      if (result.status !== 'checked') {
+        throw new Error('Expected a checked privacy preflight.')
+      }
+
+      expect(result.findings).toEqual([
+        { category: 'jwt', line: 1 },
+      ])
+      expect(result.redactedMarkdown.match(/\[REDACTED: jwt]/g)).toHaveLength(
+        1,
+      )
+      expect(result.redactedMarkdown).not.toContain(valid)
+      expect(result.redactedMarkdown).not.toContain(nestedHeader)
+    }
+  })
+
+  it('does not create partial JWT candidates outside segment limits', () => {
+    const invalidTokens = [
+      `eyJ${'a'.repeat(6)}.${'b'.repeat(10)}.${'c'.repeat(16)}`,
+      `eyJ${'a'.repeat(7)}.${'b'.repeat(9)}.${'c'.repeat(16)}`,
+      `eyJ${'a'.repeat(7)}.${'b'.repeat(10)}.${'c'.repeat(15)}`,
+      `eyJ${'a'.repeat(1_025)}.${'b'.repeat(10)}.${'c'.repeat(16)}`,
+      `eyJ${'a'.repeat(7)}.${'b'.repeat(16_385)}.${'c'.repeat(16)}`,
+      `eyJ${'a'.repeat(7)}.${'b'.repeat(10)}.${'c'.repeat(4_097)}`,
+    ]
+    const markdown = invalidTokens.join('\n')
+
+    expect(runHandoffPrivacyPreflight(markdown)).toEqual({
+      status: 'checked',
+      redactedMarkdown: markdown,
+      findings: [],
+      checkedCharacters: markdown.length,
+    })
+  })
+
+  it('preserves JWT word-boundary and extra-segment behavior', () => {
+    const token = jwt()
+    const markdown = [
+      `prefix_${token}`,
+      `prefix-${token}`,
+      `${token}.extra`,
+      `${token}-.extra`,
+    ].join('\n')
+    const result = runHandoffPrivacyPreflight(markdown)
+
+    expect(result.status).toBe('checked')
+
+    if (result.status !== 'checked') {
+      throw new Error('Expected a checked privacy preflight.')
+    }
+
+    expect(result.findings).toEqual([
+      { category: 'jwt', line: 2 },
+      { category: 'jwt', line: 3 },
+      { category: 'jwt', line: 4 },
+    ])
+    expect(result.redactedMarkdown).toContain(`prefix_${token}`)
+    expect(result.redactedMarkdown).toContain('prefix-[REDACTED: jwt]')
+    expect(result.redactedMarkdown).toContain('[REDACTED: jwt].extra')
+    expect(result.redactedMarkdown).not.toContain(`${token}.extra`)
+    expect(result.redactedMarkdown).not.toContain(`${token}-.extra`)
   })
 
   it('coalesces an earlier low-priority assignment with the full private-key range', () => {
@@ -228,6 +349,25 @@ describe('handoff privacy preflight', () => {
       const markdown = chunk
         .repeat(Math.ceil(MAX_HANDOFF_PRIVACY_CHARACTERS / chunk.length))
         .slice(0, MAX_HANDOFF_PRIVACY_CHARACTERS)
+      const startedAt = performance.now()
+      const result = runHandoffPrivacyPreflight(markdown)
+      const elapsedMilliseconds = performance.now() - startedAt
+
+      expect(elapsedMilliseconds).toBeLessThan(2_000)
+      expect(result).toEqual({
+        status: 'checked',
+        redactedMarkdown: markdown,
+        findings: [],
+        checkedCharacters: markdown.length,
+      })
+    },
+    10_000,
+  )
+
+  it(
+    'bounds JWT scanning on a dense run of separators',
+    () => {
+      const markdown = '.'.repeat(MAX_HANDOFF_PRIVACY_CHARACTERS)
       const startedAt = performance.now()
       const result = runHandoffPrivacyPreflight(markdown)
       const elapsedMilliseconds = performance.now() - startedAt

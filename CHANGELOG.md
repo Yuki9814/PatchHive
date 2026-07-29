@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.1 - 2026-07-29
+
+- Replace the bounded-backtracking JWT pattern with one forward,
+  delimiter-driven scan after the v0.5.0 release gate measured 2.14 seconds
+  against its 2.00-second Ubuntu budget.
+- Preserve the existing JWT word-boundary and segment-length contract,
+  including a following fourth segment and delimiter-free chained tokens,
+  while using a fixed-size header window and masking the complete matched
+  signature run without promoting incomplete nested headers to findings.
+- Add lower/upper segment-boundary, partial-match, extra-segment, adjacent-token,
+  prefix-density, and separator-density regressions. The 2,000,000-character
+  prefix and separator cases now complete with substantial release-gate margin.
+
 ## 0.5.0 - 2026-07-29
 
 - Add an optional, entirely local privacy preflight for final handoff Markdown.
