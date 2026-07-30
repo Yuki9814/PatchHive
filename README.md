@@ -89,6 +89,20 @@ result does not mean the handoff is safe. Review the redacted preview before
 sharing it. The check makes no network request, does not persist its opt-in
 state, and does not change the workspace schema.
 
+## Minimum-disclosure maintainer trial
+
+The optional **Maintainer trial** panel turns a completed, partial, or blocked
+workflow into a small structured feedback report. A participant records elapsed
+minutes, clarity, reuse intent, and one friction area, then explicitly consents
+before preview, copy, or download.
+
+PatchHive does not store or send trial answers. The report contains no mission
+text, repository identity, browser identity, or free-form response, and it does
+not change workspace schema v8. Sharing remains a deliberate manual action.
+See the [maintainer trial protocol](docs/maintainer-trial.md) for recruitment,
+aggregation, and claim limits. Providing the tool does not count as an external
+trial; current external evidence remains `N=0 / not evaluated`.
+
 ## What works
 
 - PR Rescue, Issue Intake, and Release Brief mission templates
@@ -102,6 +116,7 @@ state, and does not change the workspace schema.
 - stages, structured maintainer lanes, findings, and human approval gates
 - handoff readiness checks and evidence-source coverage
 - opt-in local privacy preflight with deterministic Markdown masking
+- consented, minimum-disclosure local trial report preview/copy/download
 - full, GitHub Issue, and GitHub Pull Request Markdown copy/download plus
   versioned workspace import/export
 - schema v1-v7 migration to schema v8 without changing the browser key
@@ -132,6 +147,8 @@ Scanner and workspace files are untrusted input. PatchHive:
   privacy preflight exceeds its 2,000,000-character, 500-match, or
   16,384-character credential-value bound, or finds an unclosed or ambiguously
   terminated quoted credential value
+- keeps structured trial answers in component memory only and excludes mission,
+  repository, browser, and free-form content from the trial report
 - ships a production CSP with network connections disabled and uses no runtime
   dependencies beyond React
 
@@ -169,6 +186,7 @@ Pages asset-path smoke test, and a full high-severity dependency audit.
 - `src/workspaceReducer.ts` — mission state transitions and scanner intake
 - `src/evidenceView.ts` — deterministic evidence filtering and sorting
 - `src/handoff.ts` — approval, scanner, and evidence export gates
+- `src/trialReport.ts` — minimum-disclosure trial report contract
 - `scripts/scanner-benchmark.mjs` — reproducible scanner-scale benchmark
 - `e2e/patchhive.spec.ts` — browser-level maintainer workflows
 - `.github/workflows/pages.yml` — production Pages artifact deployment

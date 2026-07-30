@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Add an optional, consented maintainer-trial report with structured outcome,
+  elapsed time, clarity, reuse intent, and friction fields so external workflow
+  evidence can be shared without mission, repository, browser, or free-form
+  content.
+- Keep trial answers ephemeral and local: generation changes neither workspace
+  schema v8 nor browser storage, and copy/download remain explicit participant
+  actions. External maintainer trial status remains `N=0 / not evaluated`.
+
 ## 0.6.0 - 2026-07-30
 
 - Add Full evidence handoff, GitHub Issue, and GitHub Pull Request Markdown

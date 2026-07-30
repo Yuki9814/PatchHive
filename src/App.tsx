@@ -143,6 +143,7 @@ function App() {
   const [handoffPrivacyPreflightEnabled, setHandoffPrivacyPreflightEnabled] =
     useState(false)
   const [handoffFormat, setHandoffFormat] = useState<HandoffFormat>('full')
+  const [trialReportEpoch, setTrialReportEpoch] = useState(0)
   const [storageIssue, setStorageIssue] = useState<StorageRecoveryIssue | null>(
     () => getInitialStorageIssue(initialLoad),
   )
@@ -571,6 +572,33 @@ function App() {
     )
   }
 
+  const copyTrialReport = async (serialized: string) => {
+    try {
+      await navigator.clipboard.writeText(serialized)
+      setStatusMessage(
+        'Minimum-disclosure trial report copied for manual sharing.',
+      )
+    } catch {
+      setStatusMessage(
+        'Clipboard access failed. Review and download the trial report instead.',
+      )
+    }
+  }
+
+  const downloadTrialReport = (
+    serialized: string,
+    generatedOn: string,
+  ) => {
+    downloadLocalFile(
+      serialized,
+      'application/json;charset=utf-8',
+      `patchhive-maintainer-trial-${generatedOn}.json`,
+    )
+    setStatusMessage(
+      'Minimum-disclosure trial report downloaded for manual sharing.',
+    )
+  }
+
   const exportWorkspace = () => {
     downloadLocalFile(
       serializeWorkspaceExport(state),
@@ -699,6 +727,7 @@ function App() {
     }
     setStorageIssue(null)
     dispatch({ type: 'reset-workspace' })
+    setTrialReportEpoch((epoch) => epoch + 1)
     setEditingEvidenceId(null)
     setEvidenceForm(emptyEvidenceForm())
     setStatusMessage('Saved payload discarded. Sample workspace reset in this tab.')
@@ -741,6 +770,7 @@ function App() {
       }
 
       dispatch({ type: 'replace-workspace', workspace: preview.workspace })
+      setTrialReportEpoch((epoch) => epoch + 1)
       setEditingEvidenceId(null)
       setEvidenceForm(emptyEvidenceForm())
       setStatusMessage('Workspace JSON imported.')
@@ -771,6 +801,7 @@ function App() {
     }
 
     dispatch({ type: 'reset-workspace' })
+    setTrialReportEpoch((epoch) => epoch + 1)
     setEditingEvidenceId(null)
     setEvidenceForm(emptyEvidenceForm())
     setStatusMessage('Workspace reset to sample data.')
@@ -869,8 +900,10 @@ function App() {
         mission={activeMission}
         onCancelEvidenceEdit={cancelEvidenceEdit}
         onCopyHandoff={copyHandoff}
+        onCopyTrialReport={copyTrialReport}
         onDeleteEvidence={deleteEvidence}
         onDownloadHandoff={downloadHandoff}
+        onDownloadTrialReport={downloadTrialReport}
         onHandoffFormatChange={setHandoffFormat}
         onEvidenceAgentFilterChange={setEvidenceAgentFilter}
         onEvidenceFilterChange={setEvidenceFilter}
@@ -882,6 +915,7 @@ function App() {
         onStatusMessage={setStatusMessage}
         onSubmitEvidence={submitEvidence}
         onToggleHandoffPrivacyPreflight={setPrivacyPreflightEnabled}
+        trialReportEpoch={trialReportEpoch}
         unlinkedEvidenceCount={unlinkedEvidenceCount}
       />
 

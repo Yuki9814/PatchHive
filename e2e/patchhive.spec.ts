@@ -345,6 +345,84 @@ test('creates a mission, links evidence, and unlocks handoff export', async ({ p
   )
 })
 
+test('downloads a consented trial report without persisting or exposing project content', async ({
+  page,
+}) => {
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.localStorage.getItem('patchhive.workspace.v1'),
+      ),
+    )
+    .not.toBeNull()
+  const storedWorkspace = await page.evaluate(() =>
+    window.localStorage.getItem('patchhive.workspace.v1'),
+  )
+
+  await expect(
+    page.getByRole('button', { name: 'Generate trial report' }),
+  ).toBeDisabled()
+  await page.getByLabel('Trial outcome').selectOption('partially-completed')
+  await page.getByLabel('Elapsed minutes').fill('37')
+  await page.getByLabel('Workflow clarity').selectOption('4')
+  await page.getByLabel('Would use again').selectOption('maybe')
+  await page.getByLabel('Primary friction').selectOption('evidence-triage')
+  await page
+    .getByRole('checkbox', { name: /consent to manually share/i })
+    .check()
+  await page.getByRole('button', { name: 'Generate trial report' }).click()
+
+  const preview = page.getByLabel('Maintainer trial report preview')
+  await expect(preview).toContainText('patchhive.maintainer-trial.v1')
+  await expect(preview).toContainText('"handoffReady": false')
+  await expect(preview).not.toContainText('pypdf XObject guard rescue')
+  await expect(preview).not.toContainText('py-pdf/pypdf')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download trial report' }).click()
+  const download = await downloadPromise
+  const downloadPath = await download.path()
+  expect(download.suggestedFilename()).toMatch(
+    /^patchhive-maintainer-trial-\d{4}-\d{2}-\d{2}\.json$/,
+  )
+  expect(downloadPath).not.toBeNull()
+  const report = JSON.parse(readFileSync(downloadPath!, 'utf8'))
+  expect(report).toMatchObject({
+    format: 'patchhive.maintainer-trial.v1',
+    participantConsent: 'affirmed',
+    privacy: {
+      storedByPatchHive: false,
+      sentByPatchHive: false,
+      includesMissionContent: false,
+      includesRepositoryIdentity: false,
+      includesBrowserIdentity: false,
+    },
+    workflow: {
+      handoffReady: false,
+    },
+    answers: {
+      outcome: 'partially-completed',
+      elapsedMinutes: 37,
+      clarityRating: 4,
+      reuseIntent: 'maybe',
+      primaryFriction: 'evidence-triage',
+    },
+  })
+  expect(JSON.stringify(report)).not.toContain('pypdf XObject guard rescue')
+  expect(JSON.stringify(report)).not.toContain('py-pdf/pypdf')
+  expect(
+    await page.evaluate(() =>
+      window.localStorage.getItem('patchhive.workspace.v1'),
+    ),
+  ).toBe(storedWorkspace)
+
+  await page.reload()
+  await expect(page.getByLabel('Trial outcome')).toHaveValue('')
+  await expect(
+    page.getByLabel('Maintainer trial report preview'),
+  ).toHaveCount(0)
+})
+
 test('opts into local privacy preflight and downloads only redacted Markdown', async ({
   page,
 }) => {

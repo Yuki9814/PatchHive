@@ -97,6 +97,107 @@ describe('App workflow', () => {
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Regression proof'))
   })
 
+  it('generates a consented trial report without persisting or copying project content', async () => {
+    const user = userEvent.setup()
+    const writeText = vi
+      .spyOn(navigator.clipboard, 'writeText')
+      .mockResolvedValue(undefined)
+    const seedMission = createDefaultWorkspace().missions[0]
+    const { unmount } = render(<App />)
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).not.toBeNull()
+    })
+    const storedWorkspace = window.localStorage.getItem(WORKSPACE_STORAGE_KEY)
+
+    expect(
+      screen.getByRole('button', { name: /generate trial report/i }),
+    ).toBeDisabled()
+    await user.selectOptions(
+      screen.getByLabelText(/trial outcome/i),
+      'partially-completed',
+    )
+    await user.type(screen.getByLabelText(/elapsed minutes/i), '37')
+    await user.selectOptions(
+      screen.getByLabelText(/workflow clarity/i),
+      '4',
+    )
+    await user.selectOptions(screen.getByLabelText(/would use again/i), 'maybe')
+    await user.selectOptions(
+      screen.getByLabelText(/primary friction/i),
+      'evidence-triage',
+    )
+    await user.click(
+      screen.getByRole('checkbox', {
+        name: /consent to manually share/i,
+      }),
+    )
+    await user.click(
+      screen.getByRole('button', { name: /generate trial report/i }),
+    )
+
+    const preview = screen.getByLabelText(/maintainer trial report preview/i)
+    expect(preview).toHaveTextContent('patchhive.maintainer-trial.v1')
+    expect(preview).toHaveTextContent('"handoffReady": false')
+    expect(preview).not.toHaveTextContent(seedMission.title)
+    expect(preview).not.toHaveTextContent(seedMission.source.rawText ?? '')
+    expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).toBe(
+      storedWorkspace,
+    )
+
+    await user.click(
+      screen.getByRole('button', { name: /copy trial report/i }),
+    )
+    expect(writeText).toHaveBeenCalledTimes(1)
+    const copiedReport = JSON.parse(
+      writeText.mock.calls[0][0],
+    ) as Record<string, unknown>
+    expect(copiedReport).toMatchObject({
+      format: 'patchhive.maintainer-trial.v1',
+      participantConsent: 'affirmed',
+      workflow: {
+        handoffReady: false,
+      },
+      answers: {
+        elapsedMinutes: 37,
+        primaryFriction: 'evidence-triage',
+      },
+    })
+    expect(JSON.stringify(copiedReport)).not.toContain(seedMission.title)
+    expect(JSON.stringify(copiedReport)).not.toContain(
+      seedMission.source.rawText ?? '',
+    )
+
+    const importedWorkspace = JSON.parse(storedWorkspace ?? '{}')
+    importedWorkspace.missions[0].title = 'Same-ID imported workspace'
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await user.upload(
+      screen.getByLabelText(/import workspace json/i),
+      new File(
+        [JSON.stringify(importedWorkspace)],
+        'same-id-workspace.json',
+        { type: 'application/json' },
+      ),
+    )
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Same-ID imported workspace',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/trial outcome/i)).toHaveValue('')
+    expect(
+      screen.queryByLabelText(/maintainer trial report preview/i),
+    ).not.toBeInTheDocument()
+
+    unmount()
+    render(<App />)
+    expect(screen.getByLabelText(/trial outcome/i)).toHaveValue('')
+    expect(
+      screen.queryByLabelText(/maintainer trial report preview/i),
+    ).not.toBeInTheDocument()
+  })
+
   it('keeps handoff privacy preflight opt-in and copies only masked Markdown when enabled', async () => {
     const user = userEvent.setup()
     const token = `ghp_${'A'.repeat(36)}`

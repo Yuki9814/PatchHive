@@ -1111,6 +1111,108 @@ textarea {
   flex: 1;
 }
 
+.trial-panel__intro,
+.trial-panel__stale {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.trial-panel__workflow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-soft);
+  padding: 10px;
+}
+
+.trial-panel__workflow strong {
+  color: var(--color-heading);
+  font-size: 0.82rem;
+}
+
+.trial-panel__workflow span {
+  color: var(--color-heading);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.trial-panel__workflow small {
+  grid-column: 1 / -1;
+  color: var(--color-muted);
+}
+
+.trial-form {
+  display: grid;
+  gap: 10px;
+}
+
+.trial-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 10px;
+  line-height: 1.45;
+}
+
+.trial-consent input {
+  width: auto;
+  margin-top: 2px;
+}
+
+.trial-report-preview {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 10px;
+}
+
+.trial-report-preview strong {
+  color: #1e3a8a;
+  font-size: 0.82rem;
+}
+
+.trial-report-preview pre {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
+.trial-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trial-actions button {
+  flex: 1 1 130px;
+}
+
+.trial-panel__stale {
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  padding: 9px 10px;
+}
+
 .drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -1335,7 +1437,8 @@ textarea {
   .finding-box,
   .lane-card__header,
   .approval-card,
-  .handoff-actions {
+  .handoff-actions,
+  .trial-actions {
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;
