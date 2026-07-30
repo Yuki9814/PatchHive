@@ -19,6 +19,7 @@ not promised before the preceding acceptance gate is met.
 - [x] require a complete same-scope rerun before scanner risks can be resolved
 - [x] export a scanner-triage appendix with accepted-risk rationale
 - [x] publish documented performance measurements at the 250-finding limit
+- [x] provide a consented, minimum-disclosure local trial report
 - [ ] test two additional evergreen browsers
 - [ ] complete an external maintainer workflow trial (`N=0`, not accepted)
 

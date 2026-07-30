@@ -31,3 +31,10 @@ pull request that records the tradeoff.
    release workflow publish the verified Pages archive and checksums.
 6. Download the published archive, verify `SHA256SUMS`, and smoke-test its
    `index.html` and relative assets.
+
+## External trial evidence
+
+Follow the [minimum-disclosure trial protocol](docs/maintainer-trial.md).
+Generated local reports are tooling evidence, not external validation. Count a
+trial only after a consenting external maintainer returns the reviewed report,
+and publish sample size and recruitment limits with any aggregated findings.

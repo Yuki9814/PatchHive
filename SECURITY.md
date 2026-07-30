@@ -68,6 +68,9 @@ Workspace and scanner files are untrusted input:
 - the optional handoff privacy preflight runs only on the final local Markdown,
   reports category and original line number without displaying matched values,
   and applies deterministic masks to preview, clipboard, and download
+- maintainer-trial answers remain in component memory only, require explicit
+  consent before generation, and use fixed-choice fields so the report contains
+  no mission, repository, browser, or free-form content
 - overlapping privacy matches coalesce across their full range under the
   highest-confidence contextual mask; supported unclosed private-key headers
   are masked through the end of the Markdown while preserving line breaks

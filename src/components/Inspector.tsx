@@ -11,6 +11,7 @@ import { ApprovalsPanel } from './ApprovalsPanel'
 import { EvidencePanel } from './EvidencePanel'
 import { HandoffPanel } from './HandoffPanel'
 import { ScanImportPanel } from './ScanImportPanel'
+import { TrialReportPanel } from './TrialReportPanel'
 import type { Dispatch, FormEvent } from 'react'
 
 type FieldStatusMap = Record<
@@ -52,9 +53,12 @@ type InspectorProps = {
   onDeleteEvidence: (evidenceId: string) => void
   onCopyHandoff: () => void
   onDownloadHandoff: () => void
+  onCopyTrialReport: (serialized: string) => Promise<void>
+  onDownloadTrialReport: (serialized: string, generatedOn: string) => void
   onHandoffFormatChange: (format: HandoffFormat) => void
   onToggleHandoffPrivacyPreflight: (enabled: boolean) => void
   onStatusMessage: (message: string) => void
+  trialReportEpoch: number
   dispatch: Dispatch<WorkspaceAction>
 }
 
@@ -89,9 +93,12 @@ export function Inspector({
   onDeleteEvidence,
   onCopyHandoff,
   onDownloadHandoff,
+  onCopyTrialReport,
+  onDownloadTrialReport,
   onHandoffFormatChange,
   onToggleHandoffPrivacyPreflight,
   onStatusMessage,
+  trialReportEpoch,
   dispatch,
 }: InspectorProps) {
   const updateHandoff = (output: Partial<HandoffDraft>) =>
@@ -170,6 +177,15 @@ export function Inspector({
         onHandoffFormatChange={onHandoffFormatChange}
         onTogglePrivacyPreflight={onToggleHandoffPrivacyPreflight}
         onUpdateHandoff={updateHandoff}
+      />
+
+      <TrialReportPanel
+        key={`trial-${trialReportEpoch}-${mission.id}`}
+        handoffBlockerCount={handoffBlockers.length}
+        handoffReady={handoffReady}
+        onCopyReport={onCopyTrialReport}
+        onDownloadReport={onDownloadTrialReport}
+        onStatusMessage={onStatusMessage}
       />
     </aside>
   )

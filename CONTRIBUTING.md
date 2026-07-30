@@ -46,6 +46,8 @@ For scanner imports, preserve these invariants:
 - source revisions remain bounded declarations and are never presented as signatures
 - a complete rerun supersedes only evidence from the same scan scope
 - imported scanner content never writes a ready-to-publish maintainer comment
+- maintainer-trial answers stay outside workspace storage, require explicit
+  consent, and never include mission, repository, browser, or free-form content
 
 Changes to the agent-hygiene contract must update the byte-pinned files under
 `fixtures/agent-hygiene/`, their SHA-256 assertions, and the complete-rerun
