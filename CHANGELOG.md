@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0 - 2026-07-30
+
+- Add Full evidence handoff, GitHub Issue, and GitHub Pull Request Markdown
+  formats without adding authentication, network access, or automatic posting.
+- Keep selected-format preview, clipboard, download, filename, and optional
+  privacy preflight on one derived Markdown payload so external templates
+  cannot diverge from the reviewed export.
+- Preserve mapped handoff evidence, accepted scanner risk, and complete-rerun
+  provenance in concise GitHub templates while omitting unmapped evidence,
+  internal workflow stages, agent drafts, and approval bookkeeping.
+
 ## 0.5.1 - 2026-07-29
 
 - Replace the bounded-backtracking JWT pattern with one forward,

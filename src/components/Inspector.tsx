@@ -4,6 +4,7 @@ import type {
   EvidenceTriageFilter,
 } from '../evidenceView'
 import type { HandoffPrivacyPreflightResult } from '../handoffPrivacy'
+import type { HandoffFormat } from '../handoff'
 import type { EvidenceFilter, EvidenceForm } from '../workspaceUi'
 import type { WorkspaceAction } from '../workspaceReducer'
 import { ApprovalsPanel } from './ApprovalsPanel'
@@ -26,6 +27,7 @@ type InspectorProps = {
   handoffMarkdown: string
   handoffPrivacyPreflight: HandoffPrivacyPreflightResult | null
   handoffPrivacyPreflightEnabled: boolean
+  handoffFormat: HandoffFormat
   handoffReady: boolean
   handoffBlockers: string[]
   handoffFieldStatusMap: FieldStatusMap
@@ -50,6 +52,7 @@ type InspectorProps = {
   onDeleteEvidence: (evidenceId: string) => void
   onCopyHandoff: () => void
   onDownloadHandoff: () => void
+  onHandoffFormatChange: (format: HandoffFormat) => void
   onToggleHandoffPrivacyPreflight: (enabled: boolean) => void
   onStatusMessage: (message: string) => void
   dispatch: Dispatch<WorkspaceAction>
@@ -61,6 +64,7 @@ export function Inspector({
   handoffMarkdown,
   handoffPrivacyPreflight,
   handoffPrivacyPreflightEnabled,
+  handoffFormat,
   handoffReady,
   handoffBlockers,
   handoffFieldStatusMap,
@@ -85,6 +89,7 @@ export function Inspector({
   onDeleteEvidence,
   onCopyHandoff,
   onDownloadHandoff,
+  onHandoffFormatChange,
   onToggleHandoffPrivacyPreflight,
   onStatusMessage,
   dispatch,
@@ -157,10 +162,12 @@ export function Inspector({
         handoffMarkdown={handoffMarkdown}
         handoffPrivacyPreflight={handoffPrivacyPreflight}
         handoffPrivacyPreflightEnabled={handoffPrivacyPreflightEnabled}
+        handoffFormat={handoffFormat}
         handoffReady={handoffReady}
         mission={mission}
         onCopyHandoff={onCopyHandoff}
         onDownloadHandoff={onDownloadHandoff}
+        onHandoffFormatChange={onHandoffFormatChange}
         onTogglePrivacyPreflight={onToggleHandoffPrivacyPreflight}
         onUpdateHandoff={updateHandoff}
       />

@@ -19,7 +19,7 @@ PatchHive is intentionally local-first:
 
 ## Scanner-to-maintainer workflow
 
-PatchHive v0.4 accepts native JSON and SARIF 2.1.0 produced by
+PatchHive v0.6 accepts native JSON and SARIF 2.1.0 produced by
 [agent-hygiene](https://github.com/Yuki9814/agent-hygiene). The complete file is
 parsed in the browser and is not uploaded.
 
@@ -41,7 +41,8 @@ In PatchHive:
    note. A fixed finding resolves only after a complete rerun with the same
    opaque scan scope no longer reports it.
 6. Attach follow-up evidence and complete the human approval gates.
-7. Copy or download the evidence-backed Markdown handoff.
+7. Choose the full evidence record, GitHub Issue, or GitHub Pull Request
+   format, then copy or download the evidence-backed Markdown handoff.
 
 Imported findings keep their format, source filename, declared-or-unverified
 producer status, rule ID, fingerprint, normalized identity, scan-completion
@@ -101,7 +102,8 @@ state, and does not change the workspace schema.
 - stages, structured maintainer lanes, findings, and human approval gates
 - handoff readiness checks and evidence-source coverage
 - opt-in local privacy preflight with deterministic Markdown masking
-- Markdown copy/download plus versioned workspace import/export
+- full, GitHub Issue, and GitHub Pull Request Markdown copy/download plus
+  versioned workspace import/export
 - schema v1-v7 migration to schema v8 without changing the browser key
 - responsive desktop/mobile workflow and keyboard-accessible controls
 
@@ -174,7 +176,7 @@ Pages asset-path smoke test, and a full high-severity dependency audit.
 
 ## Project status
 
-v0.4 is a maintained preview. Current constraints are deliberate:
+v0.6 is a maintained preview. Current constraints are deliberate:
 
 - no remote repository fetch or authenticated GitHub integration
 - no cross-device sync

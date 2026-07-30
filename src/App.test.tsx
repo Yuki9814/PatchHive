@@ -175,6 +175,35 @@ describe('App workflow', () => {
     ).toBeEnabled()
   })
 
+  it('copies the selected GitHub handoff template instead of the full internal record', async () => {
+    const user = userEvent.setup()
+    const workspace = readyWorkspaceWithMaintainerComment(
+      'Share the verified maintainer context.',
+    )
+    window.localStorage.setItem(
+      WORKSPACE_STORAGE_KEY,
+      serializeWorkspaceExport(workspace),
+    )
+    const writeText = vi
+      .spyOn(navigator.clipboard, 'writeText')
+      .mockResolvedValue(undefined)
+
+    render(<App />)
+
+    await user.selectOptions(
+      screen.getByLabelText(/handoff format/i),
+      'github-pull-request',
+    )
+    await user.click(screen.getByRole('button', { name: /^copy markdown$/i }))
+
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('## Risk and Rollback'),
+    )
+    expect(writeText).toHaveBeenCalledWith(
+      expect.not.stringContaining('## Workflow Stages'),
+    )
+  })
+
   it('does not present a zero-match privacy preflight as a safety guarantee', async () => {
     const user = userEvent.setup()
     const workspace = readyWorkspaceWithMaintainerComment(
