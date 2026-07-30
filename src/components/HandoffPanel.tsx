@@ -1,5 +1,9 @@
 import type { HandoffDraft, Mission } from '../types'
 import {
+  handoffFormatOptions,
+  type HandoffFormat,
+} from '../handoff'
+import {
   handoffPrivacyCategoryLabels,
   MAX_HANDOFF_PRIVACY_CHARACTERS,
   MAX_HANDOFF_PRIVACY_CREDENTIAL_VALUE_CHARACTERS,
@@ -21,12 +25,14 @@ type HandoffPanelProps = {
   handoffMarkdown: string
   handoffPrivacyPreflight: HandoffPrivacyPreflightResult | null
   handoffPrivacyPreflightEnabled: boolean
+  handoffFormat: HandoffFormat
   handoffReady: boolean
   handoffBlockers: string[]
   handoffFieldStatusMap: FieldStatusMap
   onUpdateHandoff: (output: Partial<HandoffDraft>) => void
   onCopyHandoff: () => void
   onDownloadHandoff: () => void
+  onHandoffFormatChange: (format: HandoffFormat) => void
   onTogglePrivacyPreflight: (enabled: boolean) => void
 }
 
@@ -35,12 +41,14 @@ export function HandoffPanel({
   handoffMarkdown,
   handoffPrivacyPreflight,
   handoffPrivacyPreflightEnabled,
+  handoffFormat,
   handoffReady,
   handoffBlockers,
   handoffFieldStatusMap,
   onUpdateHandoff,
   onCopyHandoff,
   onDownloadHandoff,
+  onHandoffFormatChange,
   onTogglePrivacyPreflight,
 }: HandoffPanelProps) {
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -115,6 +123,29 @@ export function HandoffPanel({
         value={mission.outputs.maintainerComment}
         onChange={(maintainerComment) => onUpdateHandoff({ maintainerComment })}
       />
+
+      <label className="handoff-format">
+        <span>Handoff format</span>
+        <select
+          value={handoffFormat}
+          onChange={(event) =>
+            onHandoffFormatChange(event.currentTarget.value as HandoffFormat)
+          }
+        >
+          {handoffFormatOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <small>
+          {
+            handoffFormatOptions.find(
+              (option) => option.value === handoffFormat,
+            )?.description
+          }
+        </small>
+      </label>
 
       <div className="handoff-privacy">
         <label className="handoff-privacy__toggle">

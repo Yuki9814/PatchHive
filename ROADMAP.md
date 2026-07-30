@@ -35,7 +35,7 @@ and no external usability claim before real trial evidence exists.
 - [x] detect cross-tab storage conflicts before normal write or discard and
   preserve the current in-memory workspace for backup
 - [x] add opt-in redaction checks before Markdown copy/download
-- [ ] add shareable, non-secret handoff templates for issue and pull-request use
+- [x] add shareable, non-secret handoff templates for issue and pull-request use
 - [ ] add import fixture contributions with a documented review rubric
 
 Acceptance gate: contributor documentation, security review, and evidence that

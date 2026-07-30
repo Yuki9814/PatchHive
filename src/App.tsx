@@ -13,7 +13,13 @@ import type {
   EvidenceSeverityFilter,
   EvidenceTriageFilter,
 } from './evidenceView'
-import { buildHandoffMarkdown, getHandoffBlockers, getNextStageGateBlocker } from './handoff'
+import {
+  buildHandoffMarkdown,
+  getHandoffBlockers,
+  getHandoffFormatOption,
+  getNextStageGateBlocker,
+  type HandoffFormat,
+} from './handoff'
 import { runHandoffPrivacyPreflight } from './handoffPrivacy'
 import { getHandoffFieldStatuses, getMissionHealth } from './missionHealth'
 import {
@@ -136,6 +142,7 @@ function App() {
   const [statusMessage, setStatusMessage] = useState('Workspace loaded.')
   const [handoffPrivacyPreflightEnabled, setHandoffPrivacyPreflightEnabled] =
     useState(false)
+  const [handoffFormat, setHandoffFormat] = useState<HandoffFormat>('full')
   const [storageIssue, setStorageIssue] = useState<StorageRecoveryIssue | null>(
     () => getInitialStorageIssue(initialLoad),
   )
@@ -278,7 +285,7 @@ function App() {
     const handoffBlockers = getHandoffBlockers(activeMission)
 
     return {
-      handoffMarkdown: buildHandoffMarkdown(activeMission),
+      handoffMarkdown: buildHandoffMarkdown(activeMission, handoffFormat),
       handoffReady: handoffBlockers.length === 0,
       handoffBlockers,
       missionHealth: getMissionHealth(activeMission, handoffBlockers),
@@ -305,6 +312,7 @@ function App() {
     evidenceSeverityFilter,
     evidenceStageFilter,
     evidenceTriageFilter,
+    handoffFormat,
   ])
   const handoffPrivacyPreflight = useMemo(
     () =>
@@ -341,6 +349,7 @@ function App() {
       ? handoffPrivacyPreflight.redactedMarkdown
       : ''
     : handoffMarkdown
+  const handoffFormatOption = getHandoffFormatOption(handoffFormat)
 
   const handleTemplateChange = (templateId: string) => {
     setComposer(createComposerInput(getTemplate(templateId)))
@@ -517,8 +526,8 @@ function App() {
       await navigator.clipboard.writeText(exportHandoffMarkdown)
       setStatusMessage(
         handoffPrivacyPreflightEnabled
-          ? `Redacted handoff Markdown copied after ${handoffPrivacyPreflight?.findings.length ?? 0} local mask(s).`
-          : 'Handoff Markdown copied.',
+          ? `Redacted ${handoffFormatOption.label} Markdown copied after ${handoffPrivacyPreflight?.findings.length ?? 0} local mask(s).`
+          : `${handoffFormatOption.label} Markdown copied.`,
       )
     } catch {
       setStatusMessage('Clipboard access failed. Use the preview or download instead.')
@@ -544,12 +553,12 @@ function App() {
     downloadLocalFile(
       exportHandoffMarkdown,
       'text/markdown;charset=utf-8',
-      `${activeMission.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-handoff.md`,
+      `${activeMission.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${handoffFormatOption.fileSuffix}.md`,
     )
     setStatusMessage(
       handoffPrivacyPreflightEnabled
-        ? `Redacted handoff Markdown downloaded after ${handoffPrivacyPreflight?.findings.length ?? 0} local mask(s).`
-        : 'Handoff Markdown downloaded.',
+        ? `Redacted ${handoffFormatOption.label} Markdown downloaded after ${handoffPrivacyPreflight?.findings.length ?? 0} local mask(s).`
+        : `${handoffFormatOption.label} Markdown downloaded.`,
     )
   }
 
@@ -855,12 +864,14 @@ function App() {
         handoffMarkdown={exportHandoffMarkdown}
         handoffPrivacyPreflight={handoffPrivacyPreflight}
         handoffPrivacyPreflightEnabled={handoffPrivacyPreflightEnabled}
+        handoffFormat={handoffFormat}
         handoffReady={handoffReady}
         mission={activeMission}
         onCancelEvidenceEdit={cancelEvidenceEdit}
         onCopyHandoff={copyHandoff}
         onDeleteEvidence={deleteEvidence}
         onDownloadHandoff={downloadHandoff}
+        onHandoffFormatChange={setHandoffFormat}
         onEvidenceAgentFilterChange={setEvidenceAgentFilter}
         onEvidenceFilterChange={setEvidenceFilter}
         onEvidenceFormChange={setEvidenceForm}

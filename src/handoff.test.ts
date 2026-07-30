@@ -90,6 +90,36 @@ describe('handoff', () => {
     expect(markdown).toContain('Maintainer-facing message approved')
   })
 
+  it('builds concise GitHub Issue and Pull Request templates without internal workflow detail', () => {
+    const mission = {
+      ...readyMission(),
+      evidence: [
+        ...readyMission().evidence,
+        {
+          ...readyMission().evidence[0],
+          id: 'unmapped-internal-evidence',
+          title: 'Unmapped internal evidence',
+        },
+      ],
+    }
+    const issueMarkdown = buildHandoffMarkdown(mission, 'github-issue')
+    const pullRequestMarkdown = buildHandoffMarkdown(
+      mission,
+      'github-pull-request',
+    )
+
+    expect(issueMarkdown).toContain('## Proposed Work')
+    expect(issueMarkdown).toContain('## Acceptance and Verification')
+    expect(issueMarkdown).toContain('## Accepted Scanner Risks')
+    expect(pullRequestMarkdown).toContain('## Changes')
+    expect(pullRequestMarkdown).toContain('## Verification')
+    expect(pullRequestMarkdown).toContain('## Risk and Rollback')
+    expect(issueMarkdown).not.toContain('## Workflow Stages')
+    expect(pullRequestMarkdown).not.toContain('## Agent Outputs')
+    expect(pullRequestMarkdown).not.toContain('## Approvals')
+    expect(pullRequestMarkdown).not.toContain('Unmapped internal evidence')
+  })
+
   it('blocks export until evidence is mapped into the handoff', () => {
     const mission = {
       ...readyMission(),

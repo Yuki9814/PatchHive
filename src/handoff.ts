@@ -9,6 +9,43 @@ import {
 } from './scannerTriage'
 import type { ApprovalGate, EvidenceItem, Mission, MissionStage } from './types'
 
+export type HandoffFormat = 'full' | 'github-issue' | 'github-pull-request'
+
+export type HandoffFormatOption = {
+  value: HandoffFormat
+  label: string
+  description: string
+  fileSuffix: string
+}
+
+export const handoffFormatOptions: readonly HandoffFormatOption[] = [
+  {
+    value: 'full',
+    label: 'Full evidence handoff',
+    description: 'Complete mission record with workflow, evidence, approvals, and agent outputs.',
+    fileSuffix: 'handoff',
+  },
+  {
+    value: 'github-issue',
+    label: 'GitHub Issue',
+    description: 'Concise problem, proposal, acceptance, evidence, and risk context.',
+    fileSuffix: 'issue',
+  },
+  {
+    value: 'github-pull-request',
+    label: 'GitHub Pull Request',
+    description: 'Review-ready summary, changes, verification, evidence, and rollback context.',
+    fileSuffix: 'pull-request',
+  },
+]
+
+export function getHandoffFormatOption(format: HandoffFormat) {
+  return (
+    handoffFormatOptions.find((option) => option.value === format) ??
+    handoffFormatOptions[0]
+  )
+}
+
 function listItems(items: string[]) {
   if (items.length === 0) {
     return '- None recorded'
@@ -226,7 +263,7 @@ export function getHandoffBlockers(mission: Mission) {
   return blockers
 }
 
-export function buildHandoffMarkdown(mission: Mission) {
+function fullHandoffMarkdown(mission: Mission) {
   const pendingApprovals = mission.approvals.filter((approval) => !approval.approved)
   const laneOutputs = mission.stages
     .flatMap((stage) =>
@@ -301,4 +338,127 @@ ${pendingApprovals.length > 0 ? pendingApprovals.map(approvalLine).join('\n') : 
 
 ${mission.outputs.maintainerComment}
 `
+}
+
+function compactHandoffMetadata(mission: Mission) {
+  const safeSource = mission.source.url
+    ? normalizeExternalUrl(mission.source.url)
+    : undefined
+  return [
+    `Repository: ${neutralizeUntrustedMarkdown(mission.repo)}`,
+    `Branch: ${neutralizeUntrustedMarkdown(mission.branch)}`,
+    ...(safeSource ? [`Source: <${safeSource}>`] : []),
+  ].join('\n')
+}
+
+function compactEvidence(mission: Mission) {
+  const sourceIds = new Set(
+    handoffEvidenceTargets.flatMap((field) =>
+      getHandoffFieldSourceIds(mission, field),
+    ),
+  )
+  const mappedEvidence = mission.evidence.filter((evidence) =>
+    sourceIds.has(evidence.id),
+  )
+
+  return mappedEvidence.length > 0
+    ? mappedEvidence.map(evidenceLine).join('\n')
+    : '- No evidence attached yet'
+}
+
+function githubIssueMarkdown(mission: Mission) {
+  return `# ${mission.title}
+
+${compactHandoffMetadata(mission)}
+
+## Goal
+
+${mission.goal}
+
+## Summary
+
+${mission.outputs.summary}
+
+## Proposed Work
+
+${mission.outputs.patchPlan}
+
+## Acceptance and Verification
+
+${mission.outputs.testPlan}
+
+## Evidence
+
+${compactEvidence(mission)}
+
+## Accepted Scanner Risks
+
+${acceptedScannerRisks(mission)}
+
+## Resolved Scanner Findings
+
+${resolvedScannerFindings(mission)}
+
+## Risks
+
+${mission.outputs.risks}
+
+## Maintainer Note
+
+${mission.outputs.maintainerComment}
+`
+}
+
+function githubPullRequestMarkdown(mission: Mission) {
+  return `# ${mission.title}
+
+${compactHandoffMetadata(mission)}
+
+## Summary
+
+${mission.outputs.summary}
+
+## Changes
+
+${mission.outputs.patchPlan}
+
+## Verification
+
+${mission.outputs.testPlan}
+
+## Evidence
+
+${compactEvidence(mission)}
+
+## Accepted Scanner Risks
+
+${acceptedScannerRisks(mission)}
+
+## Resolved Scanner Findings
+
+${resolvedScannerFindings(mission)}
+
+## Risk and Rollback
+
+${mission.outputs.risks}
+
+## Maintainer Note
+
+${mission.outputs.maintainerComment}
+`
+}
+
+export function buildHandoffMarkdown(
+  mission: Mission,
+  format: HandoffFormat = 'full',
+) {
+  if (format === 'github-issue') {
+    return githubIssueMarkdown(mission)
+  }
+
+  if (format === 'github-pull-request') {
+    return githubPullRequestMarkdown(mission)
+  }
+
+  return fullHandoffMarkdown(mission)
 }

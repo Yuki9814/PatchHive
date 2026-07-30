@@ -931,6 +931,27 @@ textarea {
   color: #166534;
 }
 
+.handoff-format {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.handoff-format > span {
+  color: var(--color-heading);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.handoff-format small {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
 .handoff-privacy {
   display: grid;
   gap: 8px;

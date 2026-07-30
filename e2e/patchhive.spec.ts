@@ -336,7 +336,13 @@ test('creates a mission, links evidence, and unlocks handoff export', async ({ p
     .click()
   await expect(inspector.getByRole('textbox', { name: /Patch plan/ })).toHaveValue(/Playwright regression proof/)
   await page.getByRole('button', { name: 'Approve', exact: true }).click()
+  await inspector.getByLabel('Handoff format').selectOption('github-pull-request')
   await expect(page.getByRole('button', { name: 'Copy Markdown' })).toBeEnabled()
+  await inspector.getByText('Markdown preview', { exact: true }).click()
+  await expect(inspector.locator('.handoff-preview pre')).toContainText('## Changes')
+  await expect(inspector.locator('.handoff-preview pre')).not.toContainText(
+    '## Workflow Stages',
+  )
 })
 
 test('opts into local privacy preflight and downloads only redacted Markdown', async ({
