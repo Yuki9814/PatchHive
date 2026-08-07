@@ -313,7 +313,19 @@ test('creates a mission, links evidence, and unlocks handoff export', async ({ p
   const patchPlanTab = page.getByRole('tab').nth(1)
   await expect(patchPlanTab).toHaveAttribute('aria-disabled', 'true')
 
-  await page.getByRole('button', { name: 'Approve', exact: true }).first().click()
+  const patchScopeApprovalCard = page
+    .getByRole('article')
+    .filter({ has: page.getByText('Patch scope approved', { exact: true }) })
+  const patchScopeApproval = patchScopeApprovalCard.getByRole('button', {
+    name: 'Approve',
+    exact: true,
+  })
+  await patchScopeApproval.scrollIntoViewIfNeeded()
+  await patchScopeApproval.click()
+  await expect(
+    patchScopeApprovalCard.getByRole('button', { name: 'Approved', exact: true }),
+  ).toBeVisible()
+  await expect(patchPlanTab).toBeEnabled()
   await patchPlanTab.click()
   await expect(page.getByRole('heading', { name: 'Patch Plan' })).toBeVisible()
 
@@ -335,7 +347,18 @@ test('creates a mission, links evidence, and unlocks handoff export', async ({ p
     .getByRole('button', { name: 'Draft Patch plan' })
     .click()
   await expect(inspector.getByRole('textbox', { name: /Patch plan/ })).toHaveValue(/Playwright regression proof/)
-  await page.getByRole('button', { name: 'Approve', exact: true }).click()
+  const handoffApprovalCard = page
+    .getByRole('article')
+    .filter({ has: page.getByText('Maintainer-facing message approved', { exact: true }) })
+  const handoffApproval = handoffApprovalCard.getByRole('button', {
+    name: 'Approve',
+    exact: true,
+  })
+  await handoffApproval.scrollIntoViewIfNeeded()
+  await handoffApproval.click()
+  await expect(
+    handoffApprovalCard.getByRole('button', { name: 'Approved', exact: true }),
+  ).toBeVisible()
   await inspector.getByLabel('Handoff format').selectOption('github-pull-request')
   await expect(page.getByRole('button', { name: 'Copy Markdown' })).toBeEnabled()
   await inspector.getByText('Markdown preview', { exact: true }).click()
