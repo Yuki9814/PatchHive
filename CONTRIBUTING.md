@@ -6,7 +6,7 @@ preserving the local-first boundary.
 
 ## Development
 
-Use Node.js 22 or newer.
+Use Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`.
 
 ```bash
 npm ci

@@ -157,7 +157,7 @@ See [SECURITY.md](SECURITY.md) for the security model and reporting path.
 
 ## Run locally
 
-Requires Node.js 22 or newer.
+Requires Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`.
 
 ```bash
 npm ci
