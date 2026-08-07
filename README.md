@@ -157,7 +157,7 @@ See [SECURITY.md](SECURITY.md) for the security model and reporting path.
 
 ## Run locally
 
-Requires Node.js 22 or newer.
+Requires Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`.
 
 ```bash
 npm ci
@@ -168,13 +168,15 @@ Run the complete release gate:
 
 ```bash
 npm run check
-npx playwright install chromium
+npx playwright install chromium webkit
 npm run test:e2e
 npm run benchmark:scanner
 ```
 
 `npm run check` runs lint, unit/component tests, the production build, a GitHub
 Pages asset-path smoke test, and a full high-severity dependency audit.
+`npm run test:e2e` runs the maintainer workflows in Chromium and WebKit so
+storage recovery, local import, and export behavior stay portable.
 `npm run benchmark:scanner` runs the reproducible JSON/SARIF 25, 100, and
 250-finding production benchmark. See the
 [v0.3.0 benchmark report](docs/benchmarks/v0.3.0-scanner-intake.md).

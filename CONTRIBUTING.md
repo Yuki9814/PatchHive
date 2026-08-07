@@ -6,18 +6,19 @@ preserving the local-first boundary.
 
 ## Development
 
-Use Node.js 22 or newer.
+Use Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`.
 
 ```bash
 npm ci
 npm run check
-npx playwright install chromium
+npx playwright install chromium webkit
 npm run test:e2e
 ```
 
 The complete `npm run check` gate must remain green: ESLint, unit/component
 tests, TypeScript and Vite production build, Pages asset smoke test, and the
-high-severity npm audit.
+high-severity npm audit. Browser behavior must also pass the Playwright suite
+in Chromium and WebKit.
 
 ## Pull requests
 
