@@ -449,6 +449,26 @@ test('downloads a consented trial report without persisting or exposing project 
 test('opts into local privacy preflight and downloads only redacted Markdown', async ({
   page,
 }) => {
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const rawWorkspace = window.localStorage.getItem('patchhive.workspace.v1')
+        if (!rawWorkspace) {
+          return false
+        }
+
+        try {
+          const workspace = JSON.parse(rawWorkspace) as {
+            missions?: unknown
+          }
+          return Array.isArray(workspace.missions) && workspace.missions.length > 0
+        } catch {
+          return false
+        }
+      }),
+    )
+    .toBe(true)
+
   const token = await page.evaluate(() => {
     const runtimeToken = `ghp_${'A'.repeat(36)}`
     const storageKey = 'patchhive.workspace.v1'

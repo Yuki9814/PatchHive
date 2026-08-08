@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Harden the WebKit end-to-end privacy-preflight setup so it waits for the
+  seeded local workspace before mutating the test fixture.
 - Refresh the lockfile's transitive `nanoid` dependency to a patched release so
   the high-severity dependency audit gate remains green without changing the
   local-first runtime boundary.
