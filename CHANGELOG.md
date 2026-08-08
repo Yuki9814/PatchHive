@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Refresh the lockfile's transitive `nanoid` dependency to a patched release so
+  the high-severity dependency audit gate remains green without changing the
+  local-first runtime boundary.
 - Add an optional, consented maintainer-trial report with structured outcome,
   elapsed time, clarity, reuse intent, and friction fields so external workflow
   evidence can be shared without mission, repository, browser, or free-form
