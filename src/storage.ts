@@ -11,6 +11,7 @@ import type {
   HandoffFieldSources,
   MissionStatus,
   MissionStatusFilter,
+  Mission,
   ScanSeverity,
   WorkspaceState,
 } from './types'
@@ -248,6 +249,7 @@ function isLane(value: unknown) {
       value.status === 'ready' ||
       value.status === 'blocked') &&
     typeof value.confidence === 'number' &&
+    Number.isFinite(value.confidence) &&
     Array.isArray(value.findings) &&
     value.findings.every(
       (finding) =>
@@ -328,7 +330,7 @@ function isOutputs(value: unknown) {
   )
 }
 
-function isMission(value: unknown) {
+function isMission(value: unknown): value is Mission {
   return (
     isRecord(value) &&
     typeof value.id === 'string' &&
@@ -340,6 +342,10 @@ function isMission(value: unknown) {
       value.source.kind === 'manual' ||
       value.source.kind === 'diff-paste' ||
       value.source.kind === 'log-paste') &&
+    (value.source.url === undefined || typeof value.source.url === 'string') &&
+    (value.source.rawText === undefined || typeof value.source.rawText === 'string') &&
+    (value.source.parsedRepo === undefined || typeof value.source.parsedRepo === 'string') &&
+    (value.source.parsedNumber === undefined || typeof value.source.parsedNumber === 'string') &&
     typeof value.repo === 'string' &&
     typeof value.branch === 'string' &&
     typeof value.goal === 'string' &&
@@ -539,6 +545,62 @@ function migrateWorkspace(candidate: WorkspaceState): WorkspaceState {
           : defaultWorkspace.settings.showGuidance,
     },
   }
+}
+
+/**
+ * Normalize one mission through the same validation and migration path used
+ * for workspace imports. Evidence packs intentionally carry a single mission
+ * rather than a complete workspace, so this small wrapper gives them the
+ * exact legacy-schema behavior without changing the current workspace schema.
+ */
+export function normalizeImportedMission(
+  candidate: unknown,
+  workspaceSchemaVersion = SCHEMA_VERSION,
+): Mission {
+  if (
+    !Number.isInteger(workspaceSchemaVersion) ||
+    workspaceSchemaVersion < 1
+  ) {
+    throw new Error(
+      `Workspace schema ${String(workspaceSchemaVersion)} is invalid.`,
+    )
+  }
+
+  if (workspaceSchemaVersion > SCHEMA_VERSION) {
+    throw new Error(
+      `Workspace schema ${workspaceSchemaVersion} is newer than supported schema ${SCHEMA_VERSION}.`,
+    )
+  }
+
+  if (!isMission(candidate)) {
+    throw new Error('Imported evidence pack mission is not a valid Mission.')
+  }
+
+  const wrapper: WorkspaceState = {
+    missions: [candidate],
+    activeMissionId: candidate.id,
+    templates: missionTemplates,
+    settings: {
+      schemaVersion: workspaceSchemaVersion,
+      density: 'compact',
+      missionStatusFilter: 'all',
+      mobilePanel: 'work',
+      showGuidance: true,
+    },
+  }
+
+  if (!isWorkspace(wrapper)) {
+    throw new Error('Imported evidence pack mission failed workspace validation.')
+  }
+
+  const migrated = migrateWorkspace(wrapper)
+  const mission = migrated.missions[0]
+
+  if (!mission) {
+    throw new Error('Imported evidence pack mission is empty.')
+  }
+
+  return mission
 }
 
 function exceedsWorkspaceJsonDepth(rawJson: string) {

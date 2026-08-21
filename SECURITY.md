@@ -39,6 +39,49 @@ changes the same key between the final comparison and `setItem`/`removeItem`.
 Avoid editing the same workspace in multiple tabs when lossless concurrency is
 required.
 
+### Evidence Pack threat model and limitations
+
+The v0.7 Evidence Pack is a local interchange document for one mission. Treat
+the JSON file and any digest supplied with it as untrusted input. Verification
+is bounded and happens before import; the preview is the review point, and no
+pack field is allowed to bypass workspace validation or React text rendering.
+
+- Export performs mandatory field-level local sensitive-value and path cleanup.
+  It omits `source.rawText`, evidence `sourceText`, and evidence
+  `provenance.scanRoot`. Lane `findings` are carried as `[]` and lane
+  `outputDraft` as `""`, so their source content is omitted while the Mission
+  shape remains valid. This is a disclosure boundary, not encryption; the pack
+  can still contain user-authored mission and evidence text after configured
+  cleanup. Omission entries are integrity-covered but remain unauthenticated
+  claims about source fields that are no longer present.
+- The canonical envelope has a stable JSON representation identified by
+  `canonicalization: "patchhive-canonical-json-v1"`. PatchHive computes a
+  SHA-256 over its UTF-8 canonical bytes with Web Crypto. The digest covers the
+  complete envelope except its own `digest` field, not an accidentally
+  reserialized file with different whitespace or key order.
+- A digest carried inside the same pack is only a self-consistency check. It is
+  not a signature, attestation, provenance proof, or authenticity guarantee.
+  The UI must keep `authenticity` as `unverified`. A matching digest obtained
+  through an independent trusted channel only increases confidence that the
+  reviewed bytes are the intended bytes; it does not identify who authored
+  them.
+- Import requires a successful parse, schema/omission/redaction check, digest
+  check, an exact current-workspace-schema projection, and verification preview
+  before confirmation. Same mission ids
+  replace the local mission; different ids add one. The implementation saves a
+  candidate workspace against the last observed local-storage value before it
+  dispatches the in-memory change. A failed verification, digest mismatch,
+  conflict, quota error, or storage error must leave both in-memory and stored
+  workspaces unchanged. Import is disabled while the saved-workspace baseline
+  is unknown.
+- The save check is CAS-like only. Web Storage has no strong atomic
+  compare-and-swap primitive, so another writer can still race between the
+  final comparison and `setItem`. Avoid concurrent writers when lossless
+  import matters.
+- The pack is not a backup, encryption envelope, signed release, or remote
+  synchronization protocol. It makes no network request and adds no backend,
+  OAuth, telemetry, or automatic posting path.
+
 Workspace and scanner files are untrusted input:
 
 - workspace imports are capped at 1 MB and structurally validated

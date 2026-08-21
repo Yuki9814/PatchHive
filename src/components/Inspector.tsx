@@ -1,14 +1,21 @@
-import type { EvidenceTriageStatus, HandoffDraft, Mission, MissionStage } from '../types'
+import type {
+  EvidenceTriageStatus,
+  HandoffDraft,
+  Mission,
+  MissionStage,
+} from '../types'
 import type {
   EvidenceSeverityFilter,
   EvidenceTriageFilter,
 } from '../evidenceView'
+import type { EvidencePackVerification } from '../evidencePack'
 import type { HandoffPrivacyPreflightResult } from '../handoffPrivacy'
 import type { HandoffFormat } from '../handoff'
 import type { EvidenceFilter, EvidenceForm } from '../workspaceUi'
 import type { WorkspaceAction } from '../workspaceReducer'
 import { ApprovalsPanel } from './ApprovalsPanel'
 import { EvidencePanel } from './EvidencePanel'
+import { EvidencePackPanel } from './EvidencePackPanel'
 import { HandoffPanel } from './HandoffPanel'
 import { ScanImportPanel } from './ScanImportPanel'
 import { TrialReportPanel } from './TrialReportPanel'
@@ -24,6 +31,7 @@ type FieldStatusMap = Record<
 
 type InspectorProps = {
   mission: Mission
+  storageMutationLocked: boolean
   activeStage: MissionStage
   handoffMarkdown: string
   handoffPrivacyPreflight: HandoffPrivacyPreflightResult | null
@@ -58,12 +66,16 @@ type InspectorProps = {
   onHandoffFormatChange: (format: HandoffFormat) => void
   onToggleHandoffPrivacyPreflight: (enabled: boolean) => void
   onStatusMessage: (message: string) => void
+  onImportVerifiedEvidencePack: (
+    verification: EvidencePackVerification,
+  ) => Promise<boolean> | boolean
   trialReportEpoch: number
   dispatch: Dispatch<WorkspaceAction>
 }
 
 export function Inspector({
   mission,
+  storageMutationLocked,
   activeStage,
   handoffMarkdown,
   handoffPrivacyPreflight,
@@ -98,6 +110,7 @@ export function Inspector({
   onHandoffFormatChange,
   onToggleHandoffPrivacyPreflight,
   onStatusMessage,
+  onImportVerifiedEvidencePack,
   trialReportEpoch,
   dispatch,
 }: InspectorProps) {
@@ -177,6 +190,14 @@ export function Inspector({
         onHandoffFormatChange={onHandoffFormatChange}
         onTogglePrivacyPreflight={onToggleHandoffPrivacyPreflight}
         onUpdateHandoff={updateHandoff}
+      />
+
+      <EvidencePackPanel
+        key={`evidence-pack-${mission.id}`}
+        mission={mission}
+        onImportVerifiedEvidencePack={onImportVerifiedEvidencePack}
+        onStatusMessage={onStatusMessage}
+        storageMutationLocked={storageMutationLocked}
       />
 
       <TrialReportPanel

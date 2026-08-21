@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createSarifScan } from '../scripts/generate-scan-fixtures.mjs'
@@ -754,4 +755,148 @@ test('keeps an incomplete scan blocked after an unrelated complete scope import 
     page.getByText(/Imported scan incomplete-a.json is incomplete/i),
   ).toBeVisible()
   await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeDisabled()
+})
+
+type JsonRecord = Record<string, unknown>
+
+function asJsonRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : null
+}
+
+function canonicalizeJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalizeJson(item)).join(',')}]`
+  }
+
+  const record = asJsonRecord(value)
+
+  if (record) {
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalizeJson(record[key])}`)
+      .join(',')}}`
+  }
+
+  const serialized = JSON.stringify(value)
+
+  if (serialized === undefined) {
+    throw new Error('Evidence Pack contains a non-JSON value.')
+  }
+
+  return serialized
+}
+
+function getEvidencePackMission(pack: unknown): JsonRecord {
+  const root = asJsonRecord(pack)
+
+  if (!root) {
+    throw new Error('Downloaded Evidence Pack is not a JSON object.')
+  }
+
+  const mission = asJsonRecord(root.mission)
+
+  if (!mission) {
+    throw new Error('Downloaded Evidence Pack does not contain one mission.')
+  }
+
+  return mission
+}
+
+test('downloads, verifies, imports, and rejects a tampered Evidence Pack', async ({
+  page,
+}) => {
+  const missionTitle = `Evidence Pack browser flow ${Date.now()}`
+
+  await page.getByRole('button', { name: 'New mission' }).click()
+  await page.getByLabel('Source type').selectOption('diff-paste')
+  await page.getByLabel('Source', { exact: true }).fill('diff --git a/src/evidence-pack.ts b/src/evidence-pack.ts')
+  await page.getByLabel('Title', { exact: true }).fill(missionTitle)
+  await page.getByLabel('Goal').fill('Exercise the local Evidence Pack import boundary.')
+  await page.getByRole('button', { name: 'Start mission' }).click()
+  await expect(page.getByRole('heading', { name: missionTitle })).toBeVisible()
+
+  const packDownloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download Evidence Pack' }).click()
+  const packDownload = await packDownloadPromise
+  const packPath = await packDownload.path()
+  expect(packPath).not.toBeNull()
+  const packText = readFileSync(packPath!, 'utf8')
+  const packJson = JSON.parse(packText) as unknown
+  const packRecord = asJsonRecord(packJson)
+  expect(packRecord).not.toBeNull()
+  expect(Object.keys(packRecord!).sort()).toEqual([
+    'authenticity',
+    'canonicalization',
+    'digest',
+    'format',
+    'generatedAt',
+    'hashAlgorithm',
+    'mission',
+    'redactions',
+    'schemaVersion',
+    'workspaceSchemaVersion',
+  ])
+  expect(packText).toBe(JSON.stringify(packJson))
+  expect(getEvidencePackMission(packJson).title).toBe(missionTitle)
+
+  const digest = packRecord!.digest
+  const envelopeWithoutDigest = { ...packRecord }
+  delete envelopeWithoutDigest.digest
+  expect(digest).toBe(
+    createHash('sha256')
+      .update(canonicalizeJson(envelopeWithoutDigest), 'utf8')
+      .digest('hex'),
+  )
+
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'Reset sample' }).click()
+  await expect(page.getByRole('heading', { name: missionTitle })).toHaveCount(0)
+
+  await page.getByLabel('Evidence Pack file').setInputFiles({
+    name: 'verified-evidence-pack.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(packText),
+  })
+  await page.getByRole('button', { name: 'Verify Evidence Pack' }).click()
+
+  const verifiedPreview = page.getByLabel('Verified Evidence Pack preview')
+  await expect(verifiedPreview).toContainText('Integrity self-check passed')
+  await expect(verifiedPreview).toContainText('Authenticity remains unverified')
+  await expect(
+    verifiedPreview.getByRole('button', { name: 'Import verified mission' }),
+  ).toBeVisible()
+
+  page.once('dialog', (dialog) => dialog.accept())
+  await verifiedPreview
+    .getByRole('button', { name: 'Import verified mission' })
+    .click()
+  await expect(page.getByRole('heading', { name: missionTitle })).toBeVisible()
+
+  const storedBeforeTamper = await page.evaluate(() =>
+    window.localStorage.getItem('patchhive.workspace.v1'),
+  )
+  expect(storedBeforeTamper).not.toBeNull()
+
+  const tamperedJson = JSON.parse(packText) as unknown
+  const tamperedMission = getEvidencePackMission(tamperedJson)
+  tamperedMission.title = `${missionTitle} tampered without digest update`
+
+  await page.getByLabel('Evidence Pack file').setInputFiles({
+    name: 'tampered-evidence-pack.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(tamperedJson, null, 2)),
+  })
+  await page.getByRole('button', { name: 'Verify Evidence Pack' }).click()
+
+  await expect(page.getByRole('alert')).toContainText(/Evidence Pack/i)
+  await expect(page.getByLabel('Verified Evidence Pack preview')).toHaveCount(0)
+  await expect(
+    page.getByRole('button', { name: 'Import verified mission' }),
+  ).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: missionTitle })).toBeVisible()
+  expect(
+    await page.evaluate(() => window.localStorage.getItem('patchhive.workspace.v1')),
+  ).toBe(storedBeforeTamper)
 })

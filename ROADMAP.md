@@ -44,6 +44,24 @@ the new output reduces manual cleanup without expanding the network boundary.
 Interoperability is locally verified; the external maintainer trial remains
 `N=0 / not evaluated`.
 
+## v0.7 — local Evidence Pack
+
+- [x] export exactly one mission as a minimum-disclosure Evidence Pack
+- [x] apply mandatory field-level local sensitive-value and path cleanup
+- [x] omit raw source text, evidence source text, scanner roots, and agent drafts
+- [x] canonicalize the envelope deterministically and compute a Web Crypto SHA-256
+- [x] preview integrity verification and keep authenticity explicitly unverified
+- [x] optionally compare a digest obtained through an independent trusted channel
+- [x] import only after verification, saving before in-memory dispatch
+- [x] replace a same-id mission or add a different-id mission atomically from the
+  user's point of view, while preserving the workspace on failure
+- [ ] complete an external maintainer workflow trial (`N=0`, not evaluated)
+
+Acceptance gate: local schema, redaction, canonicalization, digest, and
+replace/add failure paths are covered by unit and browser checks. This does not
+close issue #13 or establish external adoption, authenticity, or performance
+evidence; those remain separate follow-up work.
+
 ## Out of scope for the preview
 
 - autonomous code modification

@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getHandoffBlockers } from './handoff'
 import {
   MAX_WORKSPACE_JSON_DEPTH,
+  SCHEMA_VERSION,
   WORKSPACE_RECOVERY_FORMAT,
   WORKSPACE_STORAGE_KEY,
   clearWorkspace,
   createDefaultWorkspace,
   loadWorkspace,
+  normalizeImportedMission,
   parseWorkspaceImport,
   previewWorkspaceImport,
   saveWorkspace,
@@ -302,6 +304,42 @@ describe('storage', () => {
     expect(migrated.missions[0].status).toBe('active')
     expect(migrated.missions[0].evidence[0].updatedAt).toBeTruthy()
     expect(migrated.missions[0].outputs.fieldSources).toEqual({})
+  })
+
+  it('normalizes one legacy mission through the workspace migration path', () => {
+    const workspace = createDefaultWorkspace()
+    const legacy = JSON.parse(JSON.stringify(workspace.missions[0])) as MutableRecord
+    const legacyOutputs = asRecord(legacy.outputs)
+    const legacyEvidence = (legacy.evidence as unknown[]).map((item) => {
+      const evidence = asRecord(item)
+      delete evidence.updatedAt
+      return evidence
+    })
+
+    delete legacy.status
+    delete legacyOutputs.fieldSources
+    legacy.evidence = legacyEvidence
+
+    const normalized = normalizeImportedMission(legacy, 4)
+
+    expect(normalized.status).toBe('active')
+    expect(normalized.outputs.fieldSources).toEqual({})
+    expect(normalized.evidence[0].updatedAt).toBeTruthy()
+    expect(() =>
+      normalizeImportedMission(
+        {
+          ...legacy,
+          source: {
+            ...(legacy.source as MutableRecord),
+            rawText: { invalid: true },
+          },
+        },
+        4,
+      ),
+    ).toThrow(/valid Mission/i)
+    expect(() => normalizeImportedMission(legacy, SCHEMA_VERSION + 1)).toThrow(
+      /newer than supported/i,
+    )
   })
 
   it('repairs an invalid active mission id and persists schema v8', () => {

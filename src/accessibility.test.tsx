@@ -18,6 +18,10 @@ describe('accessibility contract', () => {
     })
     expect(new Set(ids).size).toBe(ids.length)
     expect(screen.getByLabelText(/evidence, approvals, and handoff/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Evidence Pack' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Verify Evidence Pack' }),
+    ).toBeDisabled()
     expect(screen.getByText('Workspace loaded.')).toHaveAttribute('aria-live', 'polite')
   })
 
