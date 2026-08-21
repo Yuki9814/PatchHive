@@ -5,7 +5,9 @@
 
 PatchHive is a browser-only workbench for open-source maintainers. It turns issue
 context and scanner results into a structured mission: evidence, triage status,
-human approval gates, and a concise Markdown handoff.
+human approval gates, and a concise Markdown handoff. v0.7 adds a local Evidence
+Pack for moving one mission between browser profiles without moving a complete
+workspace or raw source material.
 
 [Open the live demo](https://yuki9814.github.io/PatchHive/)
 
@@ -19,7 +21,7 @@ PatchHive is intentionally local-first:
 
 ## Scanner-to-maintainer workflow
 
-PatchHive v0.6 accepts native JSON and SARIF 2.1.0 produced by
+PatchHive v0.7 accepts native JSON and SARIF 2.1.0 produced by
 [agent-hygiene](https://github.com/Yuki9814/agent-hygiene). The complete file is
 parsed in the browser and is not uploaded.
 
@@ -89,6 +91,46 @@ result does not mean the handoff is safe. Review the redacted preview before
 sharing it. The check makes no network request, does not persist its opt-in
 state, and does not change the workspace schema.
 
+## Evidence Pack workflow
+
+The **Evidence Pack** is a deliberately narrow v0.7 exchange format. It exports
+one selected mission as a minimum-disclosure JSON document, not the whole
+workspace. Export applies mandatory field-level local cleanup for sensitive
+values and local paths. The pack omits `source.rawText`, evidence
+`sourceText`, evidence `provenance.scanRoot`, agent `outputDraft` values, and
+other fields that are not needed to review or restore the mission. A pack does
+not require a backend, network request, OAuth, or a GitHub login. v0.7 accepts
+only the current workspace schema; it does not transform an older or newer
+mission after checking the digest.
+
+1. Choose one mission and select **Download Evidence Pack**.
+2. In the destination browser, choose the JSON file and select **Verify
+   Evidence Pack**. The browser parses the bounded document, applies the same
+   required redaction rules, canonicalizes the envelope with its `digest`
+   field removed, and computes a Web Crypto SHA-256 digest.
+3. Review the verification preview. A matching self-check reports **Integrity
+   self-check passed**. The pack always reports **Authenticity remains
+   unverified**. A SHA-256 digest obtained through an independent trusted
+   channel can match the computed digest and only increase confidence in the
+   bytes.
+4. Select **Import verified mission** only after reviewing the preview. A
+   mission with the same id replaces the local copy; a different id is added.
+
+The digest is an integrity comparison, not a signature, attestation, or proof
+that the pack came from a particular maintainer. A digest printed inside the
+same file is self-asserted and cannot establish authenticity. A trusted digest
+from an independent channel can increase confidence in the bytes being checked,
+but it does not turn the pack into a signed statement.
+
+Import uses a save-first, CAS-like local-storage expectation: it checks the
+currently stored workspace, saves the candidate workspace, and only then
+dispatches the in-memory replacement/addition. Web Storage is not a strong
+compare-and-swap primitive, so this narrows (but cannot eliminate) a concurrent
+writer race. Verification, validation, redaction, digest mismatch, quota,
+storage, or conflict failures leave both the current in-memory workspace and
+the stored workspace unchanged. Import is disabled when PatchHive cannot read
+or establish the saved-workspace baseline.
+
 ## Minimum-disclosure maintainer trial
 
 The optional **Maintainer trial** panel turns a completed, partial, or blocked
@@ -119,6 +161,9 @@ trial; current external evidence remains `N=0 / not evaluated`.
 - consented, minimum-disclosure local trial report preview/copy/download
 - full, GitHub Issue, and GitHub Pull Request Markdown copy/download plus
   versioned workspace import/export
+- single-mission Evidence Pack download, canonical SHA-256 verification,
+  optional independent trusted-digest comparison, and verified replace/add
+  import
 - schema v1-v7 migration to schema v8 without changing the browser key
 - responsive desktop/mobile workflow and keyboard-accessible controls
 
@@ -147,6 +192,17 @@ Scanner and workspace files are untrusted input. PatchHive:
   privacy preflight exceeds its 2,000,000-character, 500-match, or
   16,384-character credential-value bound, or finds an unclosed or ambiguously
   terminated quoted credential value
+- exports Evidence Packs with mandatory field-level local sensitive-value and
+  path cleanup, including encoded paths, space-split local paths, and sensitive
+  URL parameters in retained text; omits raw source text, evidence source text,
+  scanner roots, and agent drafts instead of relying on a later reviewer
+- computes a stable canonical JSON SHA-256 with Web Crypto over the complete
+  envelope except `digest`; the self-reported digest is not a signature and
+  `authenticity` remains `unverified`, while an independently obtained trusted
+  digest can only increase confidence in the bytes
+- verifies and previews a pack before import, then saves before dispatching the
+  in-memory mission; a failed validation, digest, save, quota, or conflict
+  leaves the workspace unchanged
 - keeps structured trial answers in component memory only and excludes mission,
   repository, browser, and free-form content from the trial report
 - ships a production CSP with network connections disabled and uses no runtime
@@ -189,18 +245,25 @@ storage recovery, local import, and export behavior stay portable.
 - `src/evidenceView.ts` — deterministic evidence filtering and sorting
 - `src/handoff.ts` — approval, scanner, and evidence export gates
 - `src/trialReport.ts` — minimum-disclosure trial report contract
+- `src/evidencePack.ts` — single-mission pack redaction, canonicalization, and
+  Web Crypto digest verification
 - `scripts/scanner-benchmark.mjs` — reproducible scanner-scale benchmark
 - `e2e/patchhive.spec.ts` — browser-level maintainer workflows
+- `docs/evidence-pack-v0.7.0.md` — pack schema, verification, and evidence-grade
+  limits
 - `.github/workflows/pages.yml` — production Pages artifact deployment
 - `.github/workflows/release.yml` — verified Pages archive and checksum release
 
 ## Project status
 
-v0.6 is a maintained preview. Current constraints are deliberate:
+v0.7 is a maintained preview. Current constraints are deliberate:
 
 - no remote repository fetch or authenticated GitHub integration
 - no cross-device sync
-- Markdown is the only maintainer-facing export
+- Evidence Packs move one minimum-disclosure mission at a time; they are not
+  encrypted archives, signed releases, or a hosted backup
+- Markdown remains the maintainer-facing handoff; Evidence Packs are a narrow
+  local interchange format, not a public release artifact
 - scanner imports support agent-hygiene, not arbitrary SARIF producers
 - external maintainer trial evidence remains `N=0`; no adoption, completion-rate,
   or usability claim has been accepted

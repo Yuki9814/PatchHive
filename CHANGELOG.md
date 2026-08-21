@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.7.0 - 2026-08-21
+
 - Harden the WebKit end-to-end privacy-preflight setup so it waits for the
   seeded local workspace before mutating the test fixture.
 - Refresh the lockfile's transitive `nanoid` dependency to a patched release so
@@ -14,6 +16,22 @@
 - Keep trial answers ephemeral and local: generation changes neither workspace
   schema v8 nor browser storage, and copy/download remain explicit participant
   actions. External maintainer trial status remains `N=0 / not evaluated`.
+- Add a local Evidence Pack for one mission: export a minimum-disclosure,
+  field-redacted canonical JSON envelope, compute its Web Crypto SHA-256 digest,
+  and optionally compare it with a digest obtained from an independent trusted
+  channel.
+- Verify a pack in a preview before import. A verified pack replaces a mission
+  with the same id or adds a mission with a new id only after a CAS-like saved
+  workspace check; a failed verification or save leaves the in-memory and
+  stored workspaces unchanged.
+- Keep the pack's self-reported digest as an integrity check only, never a
+  signature or authenticity proof. Authenticity remains `unverified`; an
+  independently obtained trusted digest can only increase confidence in the
+  bytes. External maintainer trial evidence remains `N=0 / not evaluated`.
+- Fail closed on non-canonical current-schema missions, oversized export or
+  import bytes, duplicate or impossible omission claims, deep percent-encoded
+  paths and sensitive URLs, non-finite numbers, verification file races, and
+  unknown browser-storage baselines.
 
 ## 0.6.0 - 2026-07-30
 

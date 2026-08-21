@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { createEvidencePack } from './evidencePack'
 import {
   WORKSPACE_STORAGE_KEY,
   createDefaultWorkspace,
@@ -33,6 +34,21 @@ function readyWorkspaceWithMaintainerComment(maintainerComment: string) {
       },
     ],
   }
+}
+
+async function evidencePackFile(title?: string) {
+  const workspace = createDefaultWorkspace()
+  const mission = title
+    ? { ...workspace.missions[0], title }
+    : workspace.missions[0]
+  const result = await createEvidencePack({
+    generatedAt: '2026-08-21T00:00:00.000Z',
+    mission,
+  })
+
+  return new File([result.serialized], 'mission-evidence-pack.json', {
+    type: 'application/json',
+  })
 }
 
 describe('App workflow', () => {
@@ -95,6 +111,181 @@ describe('App workflow', () => {
     expect(screen.getByRole('button', { name: /copy markdown/i })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: /copy markdown/i }))
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Regression proof'))
+  })
+
+  it('exports and verifies an Evidence Pack with an explicit integrity preview', async () => {
+    const user = userEvent.setup()
+    const writeText = vi
+      .spyOn(navigator.clipboard, 'writeText')
+      .mockResolvedValue(undefined)
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined)
+    const originalCreateObjectURL = URL.createObjectURL
+    const originalRevokeObjectURL = URL.revokeObjectURL
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:patchhive-evidence-pack'),
+    })
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Download Evidence Pack' }))
+    await waitFor(() => {
+      expect(screen.getByLabelText(/evidence pack digest/i)).toBeInTheDocument()
+    })
+    expect(screen.getByLabelText(/evidence pack digest/i)).toHaveTextContent(
+      /[0-9a-f]{64}/i,
+    )
+    expect(click).toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Copy digest' }))
+    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/^[0-9a-f]{64}$/i))
+
+    const file = await evidencePackFile()
+    await user.upload(screen.getByLabelText(/evidence pack file/i), file)
+    await user.click(screen.getByRole('button', { name: 'Verify Evidence Pack' }))
+
+    expect(await screen.findByText('Integrity self-check passed')).toBeInTheDocument()
+    expect(screen.getByText('Authenticity remains unverified')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import verified mission' })).toBeEnabled()
+    if (originalCreateObjectURL) {
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: originalCreateObjectURL,
+      })
+    } else {
+      delete (URL as unknown as { createObjectURL?: unknown }).createObjectURL
+    }
+    if (originalRevokeObjectURL) {
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        value: originalRevokeObjectURL,
+      })
+    } else {
+      delete (URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL
+    }
+  })
+
+  it('fails closed on a trusted digest mismatch and never offers import', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.upload(
+      screen.getByLabelText(/evidence pack file/i),
+      await evidencePackFile(),
+    )
+    await user.type(
+      screen.getByLabelText(/trusted sha-256/i),
+      '0'.repeat(64),
+    )
+    await user.click(screen.getByRole('button', { name: 'Verify Evidence Pack' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/digest|integrity|authenticity/i)
+    expect(
+      screen.queryByRole('button', { name: 'Import verified mission' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps workspace and storage unchanged when Evidence Pack import is cancelled', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => {
+      expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).not.toBeNull()
+    })
+    const before = window.localStorage.getItem(WORKSPACE_STORAGE_KEY)
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    await user.upload(
+      screen.getByLabelText(/evidence pack file/i),
+      await evidencePackFile('Cancelled Evidence Pack Mission'),
+    )
+    await user.click(screen.getByRole('button', { name: 'Verify Evidence Pack' }))
+    await user.click(await screen.findByRole('button', { name: 'Import verified mission' }))
+
+    expect(screen.getByRole('heading', { name: /pypdf xobject guard rescue/i })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Cancelled Evidence Pack Mission' })).not.toBeInTheDocument()
+    expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).toBe(before)
+    expect(screen.getByText('Evidence Pack import cancelled.')).toBeInTheDocument()
+  })
+
+  it('keeps memory and storage unchanged when Evidence Pack save detects a conflict', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => {
+      expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).not.toBeNull()
+    })
+    const original = window.localStorage.getItem(WORKSPACE_STORAGE_KEY)
+    const external = JSON.parse(original ?? '{}') as Record<string, unknown> & {
+      missions: Array<Record<string, unknown>>
+    }
+    external.missions[0].title = 'External workspace wins'
+    const externalRaw = JSON.stringify(external)
+    window.localStorage.setItem(WORKSPACE_STORAGE_KEY, externalRaw)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    await user.upload(
+      screen.getByLabelText(/evidence pack file/i),
+      await evidencePackFile('Conflict Evidence Pack Mission'),
+    )
+    await user.click(screen.getByRole('button', { name: 'Verify Evidence Pack' }))
+    await user.click(await screen.findByRole('button', { name: 'Import verified mission' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/not saved|changed elsewhere/i)
+    expect(screen.getByRole('heading', { name: /pypdf xobject guard rescue/i })).toBeInTheDocument()
+    expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).toBe(externalRaw)
+  })
+
+  it('keeps memory and storage unchanged when Evidence Pack save hits quota', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => {
+      expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).not.toBeNull()
+    })
+    const original = window.localStorage.getItem(WORKSPACE_STORAGE_KEY)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      const error = new Error('quota')
+      Object.defineProperty(error, 'name', { value: 'QuotaExceededError' })
+      throw error
+    })
+
+    await user.upload(
+      screen.getByLabelText(/evidence pack file/i),
+      await evidencePackFile('Quota Evidence Pack Mission'),
+    )
+    await user.click(screen.getByRole('button', { name: 'Verify Evidence Pack' }))
+    await user.click(await screen.findByRole('button', { name: 'Import verified mission' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/storage is full|quota/i)
+    expect(screen.getByRole('heading', { name: /pypdf xobject guard rescue/i })).toBeInTheDocument()
+    expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).toBe(original)
+  })
+
+  it('blocks Evidence Pack import when the saved workspace baseline cannot be read', async () => {
+    const user = userEvent.setup()
+    const file = await evidencePackFile('Unknown baseline Evidence Pack Mission')
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      const error = new Error('blocked')
+      Object.defineProperty(error, 'name', { value: 'SecurityError' })
+      throw error
+    })
+    const confirm = vi.spyOn(window, 'confirm')
+
+    render(<App />)
+    await user.upload(screen.getByLabelText(/evidence pack file/i), file)
+    await user.click(screen.getByRole('button', { name: 'Verify Evidence Pack' }))
+
+    const importButton = await screen.findByRole('button', {
+      name: 'Import verified mission',
+    })
+    expect(importButton).toBeDisabled()
+    expect(screen.getByText(/write-protected/i)).toBeInTheDocument()
+    expect(setItem).not.toHaveBeenCalled()
+    expect(confirm).not.toHaveBeenCalled()
   })
 
   it('generates a consented trial report without persisting or copying project content', async () => {

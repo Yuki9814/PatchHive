@@ -14,6 +14,10 @@ import type {
   EvidenceTriageFilter,
 } from './evidenceView'
 import {
+  mergeEvidencePackIntoWorkspace,
+  type EvidencePackVerification,
+} from './evidencePack'
+import {
   buildHandoffMarkdown,
   getHandoffBlockers,
   getHandoffFormatOption,
@@ -53,6 +57,23 @@ type InspectorPanel = 'evidence' | 'approvals' | 'handoff'
 type IsolatedRecoveryPayload = {
   rawPayload: string
   reason: 'corrupt' | 'future-schema'
+}
+
+type EvidencePackMissionInfo = {
+  id: string
+  title: string
+  repo: string
+}
+
+function getEvidencePackMissionInfo(
+  verification: EvidencePackVerification,
+): EvidencePackMissionInfo {
+  const mission = verification.pack.mission
+  return {
+    id: mission.id,
+    title: mission.title,
+    repo: mission.repo,
+  }
 }
 
 function getInitialStorageIssue(
@@ -172,6 +193,10 @@ function App() {
     storageIssue?.status === 'future-schema'
   const storageMutationLocked =
     isolatedPayloadLocked || storageIssue?.status === 'conflict'
+  const evidencePackImportLocked =
+    storageMutationLocked ||
+    storageIssue?.status === 'unavailable' ||
+    storageIssue?.status === 'quota'
   const storageAutoSaveBlocked = storageIssue !== null
 
   useEffect(() => {
@@ -733,6 +758,98 @@ function App() {
     setStatusMessage('Saved payload discarded. Sample workspace reset in this tab.')
   }
 
+  const importVerifiedEvidencePack = async (
+    verification: EvidencePackVerification,
+  ): Promise<boolean> => {
+    if (
+      storageMutationLocked ||
+      expectedStoredRawRef.current.status === 'unknown'
+    ) {
+      setStatusMessage(
+        expectedStoredRawRef.current.status === 'unknown'
+          ? 'Evidence Pack import is blocked until PatchHive can read or establish the saved workspace baseline. Retry the storage save first.'
+          : storageIssue?.status === 'conflict'
+          ? 'Evidence Pack import is blocked because another tab or PatchHive version changed the stored workspace.'
+          : 'Evidence Pack import is blocked while the saved payload is isolated.',
+      )
+      return false
+    }
+
+    let candidate
+
+    try {
+      candidate = mergeEvidencePackIntoWorkspace(state, verification)
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : 'Verified Evidence Pack could not be merged into this workspace.',
+      )
+      return false
+    }
+
+    const importedMission = getEvidencePackMissionInfo(verification)
+    const existingMission = importedMission
+      ? state.missions.find((mission) => mission.id === importedMission.id)
+      : undefined
+    const missionDescription = importedMission
+      ? `“${importedMission.title}” (${importedMission.id}) from ${importedMission.repo}`
+      : 'the verified mission'
+    const replacementDescription = existingMission
+      ? `A mission with the same id already exists, so the entire existing mission will be replaced.`
+      : 'This mission id is new, so the mission will be added to the workspace.'
+
+    if (
+      !window.confirm(
+        `Import ${missionDescription}? ${replacementDescription} This changes local workspace data only; export a backup first if needed.`,
+      )
+    ) {
+      setStatusMessage('Evidence Pack import cancelled.')
+      return false
+    }
+
+    const result = saveWorkspace(candidate, expectedStoredRawRef.current)
+
+    if (result.status !== 'saved') {
+      if (
+        (result.status === 'quota' || result.status === 'unavailable') &&
+        result.observedRaw !== undefined
+      ) {
+        expectedStoredRawRef.current = {
+          status: 'known',
+          storedRaw: result.observedRaw,
+        }
+      }
+
+      setStorageIssue(getStorageWriteIssue(result))
+      setStatusMessage(
+        result.status === 'conflict'
+          ? 'Evidence Pack import was not saved because stored workspace data changed elsewhere.'
+          : result.status === 'quota'
+            ? 'Evidence Pack import was not saved because browser storage is full.'
+            : 'Evidence Pack import was not saved because browser storage is unavailable.',
+      )
+      return false
+    }
+
+    persistedWorkspaceRef.current = serializeWorkspaceExport(candidate)
+    expectedStoredRawRef.current = {
+      status: 'known',
+      storedRaw: result.storedRaw,
+    }
+    dispatch({ type: 'replace-workspace', workspace: candidate })
+    setTrialReportEpoch((epoch) => epoch + 1)
+    setEditingEvidenceId(null)
+    setEvidenceForm(emptyEvidenceForm())
+    setFindingDrafts({})
+    setStatusMessage(
+      existingMission
+        ? `Evidence Pack imported. Mission “${importedMission.title}” replaced the same-id mission.`
+        : 'Evidence Pack imported. Verified mission added to the workspace.',
+    )
+    return true
+  }
+
   const importWorkspace = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
 
@@ -898,6 +1015,7 @@ function App() {
         handoffFormat={handoffFormat}
         handoffReady={handoffReady}
         mission={activeMission}
+        onImportVerifiedEvidencePack={importVerifiedEvidencePack}
         onCancelEvidenceEdit={cancelEvidenceEdit}
         onCopyHandoff={copyHandoff}
         onCopyTrialReport={copyTrialReport}
@@ -915,6 +1033,7 @@ function App() {
         onStatusMessage={setStatusMessage}
         onSubmitEvidence={submitEvidence}
         onToggleHandoffPrivacyPreflight={setPrivacyPreflightEnabled}
+        storageMutationLocked={evidencePackImportLocked}
         trialReportEpoch={trialReportEpoch}
         unlinkedEvidenceCount={unlinkedEvidenceCount}
       />
