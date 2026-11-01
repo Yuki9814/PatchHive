@@ -197,8 +197,9 @@ for (const scenario of [
 test('keeps working in memory after quota failure and persists on explicit retry', async ({
   page,
 }) => {
-  await page.evaluate(() => window.localStorage.clear())
   await page.addInitScript(() => {
+    // Reset before the app boots, avoiding a race with its pending autosave.
+    window.localStorage.removeItem('patchhive.workspace.v1')
     const runtime = window as typeof window & {
       __patchHiveQuota: boolean
       __patchHiveSaveAttempts: number
